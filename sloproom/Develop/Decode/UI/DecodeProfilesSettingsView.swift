@@ -14,6 +14,7 @@ import AppKit
 struct DecodeProfilesSettingsView: View {
     @Environment(AppModel.self) private var model
     private let store = DecodeProfilesStore.shared
+    private let fitter = DecodeFitController.shared
 
     @State private var selection: Int64?
     @State private var draft: DecodeProfile?
@@ -65,6 +66,7 @@ struct DecodeProfilesSettingsView: View {
                         run { try model.catalog.setGlobalDecodeDefault(id) }
                     }
                     Text("")
+                    Text("")
                 }
                 ForEach(cameras, id: \.camera) { entry in
                     GridRow {
@@ -73,9 +75,49 @@ struct DecodeProfilesSettingsView: View {
                             run { try model.catalog.setCameraDecodeDefault(entry.camera, profileID: id) }
                         }
                         Text("\(entry.count) photo\(entry.count == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
+                        Button("Match Camera JPEG…") { fitter.start(camera: entry.camera, catalog: model.catalog) }
+                            .controlSize(.small)
+                            .disabled(fitter.isRunning)
+                            .help("Fit a profile so unedited photos match this camera's own JPEGs (up to \(DecodeFitController.photoLimit) of its RAWs; curve, black point, brightness, highlight shoulder)")
                     }
                 }
             }
+            fitStatus
+        }
+    }
+
+    @ViewBuilder private var fitStatus: some View {
+        if let camera = fitter.camera {
+            HStack(spacing: 10) {
+                switch fitter.state {
+                case .idle:
+                    EmptyView()
+                case .preparing(let done, let total):
+                    ProgressView(value: total > 0 ? Double(done) / Double(total) : 0).frame(width: 160)
+                    Text("\(camera.displayName): reading camera JPEGs \(done)/\(total)…")
+                    Button("Cancel") { fitter.cancel() }
+                case .fitting(let progress):
+                    ProgressView(value: progress).frame(width: 160)
+                    Text("\(camera.displayName): matching…")
+                    Button("Cancel") { fitter.cancel() }
+                case .finished(let id, let summary):
+                    Image(systemName: "checkmark.circle").foregroundStyle(.green)
+                    Text("“\(store.profile(id: id)?.name ?? "Profile")”: \(summary)")
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Use as Default for \(camera.displayName)") {
+                        run { try model.catalog.setCameraDecodeDefault(camera, profileID: id) }
+                        fitter.dismissResult()
+                    }
+                    Button("Show") { select(id) }
+                    Button("Done") { fitter.dismissResult() }
+                case .failed(let message):
+                    Image(systemName: "exclamationmark.triangle").foregroundStyle(.orange)
+                    Text("\(camera.displayName): \(message)")
+                    Button("Done") { fitter.dismissResult() }
+                }
+            }
+            .font(.callout)
+            .controlSize(.small)
         }
     }
 

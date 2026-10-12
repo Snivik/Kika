@@ -661,8 +661,18 @@ built-in (Apple's per-file defaults + DecodeParams.builtin)
   (debounced live saves), duplicate / delete (with usage count) / import / export); `DecodeParamRow` (one
   knob editing one layer: setting it back to the inherited value or Reset clears it). DevScript `decode …`.
 - Region renders (`RegionRenderer`) key their cached decode on the resolved params + decoder version.
-- Still to do: "Match camera JPEG" fitting of a camera profile; brightness matching (`BaselineExposure`) is
-  measured at Apple's default curve, so profiles with a different `boost` render darker / brighter.
+- **Match Camera JPEG** (`DecodeProfileFitter`, engine; `UI/DecodeFitController` runs it for one camera at a
+  time): `catalog.decodeFitPhotos(camera:limit:)` (≤ 16 RAW masters spread over capture dates) →
+  `prepare(url:)` (the RAW's embedded JPEG, same framing ±2 % aspect, at the ≤ 192 px render size, Oklab) →
+  `fit(samples:maxEvaluations:progress:isCancelled:)`: coordinate descent with step halving over normalised
+  `boost`, `boostShadow`, `shadowBias`, `baselineOffset`, `shoulderKnee`, `shoulderHueKeep`; cost = mean over
+  photos of the 95 %-trimmed per-pixel ΔL² + 0.5·(Δa² + Δb²) (samples render in parallel, ~20–30 ms each);
+  `Result.summary` reports ΔE (RMS Oklab × 100). Noise reduction / sharpening / WB are not fitted; per-photo
+  brightness matching stays on (the fit finds the curve shape + a residual offset). Result: a new profile
+  "<camera> Camera Match" (notes = summary); Settings > Raw Decode offers Use as Default / Show. P1033881's
+  set (8 Panasonic DC-S9 RAWs): ΔE 2.8 → 2.2 in 23 s.
+- `BaselineExposure` (camera-matched brightness) is measured at Apple's default curve, so a profile with a
+  very different `boost` (Flat for Editing) renders darker; the fitter's `baselineOffset` compensates for its camera.
 
 ## Masks (`Develop/Masking/*`, `Stages/MaskStage`, `Panels/MaskPanel`, `Overlays/MaskOverlayView`)
 

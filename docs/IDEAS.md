@@ -3,15 +3,8 @@
 Possible future projects. Not commitments, and not documentation of the current code (that is
 `ARCHITECTURE.md`). Each entry says what it is, why it might be worth doing, and what we know so far.
 
-## Match camera JPEG (decode profile fitting)
-
-**Idea.** Fit a camera's decode profile (boost, boost shadow, shadow bias, baseline offset, shoulder) so the
-pipeline matches the camera's own JPEGs (paired `.JPG` or embedded preview) over 20–50 photos.
-Noise reduction and sharpening stay Auto (a downsized preview can't measure them). It also fixes
-brightness matching for profiles with a different base curve (`BaselineExposure` is measured at boost 1).
-
-*Done (2026-10-12): per-edit decoder pinning and the calibration UI are now Decode profiles; see
-ARCHITECTURE.md › Decode profiles.*
+*Done (2026-10-12): per-edit decoder pinning, the calibration UI and Match Camera JPEG are now Decode
+profiles; see ARCHITECTURE.md › Decode profiles.*
 
 ## Pluggable RAW front end: Apple native or our own decoder and demosaic
 

@@ -268,5 +268,33 @@ struct DecodeCheck {
             try catalog.setCameraDecodeDefault(cam, profileID: nil)
         }
         print("    renders in \(outDir.path)")
+        try fitChecks(raw: raw)
+    }
+
+    /// Match Camera JPEG on the RAW and up to 3 neighbours (short run: 40 evaluations).
+    static func fitChecks(raw: URL) throws {
+        print("Match Camera JPEG")
+        let dir = raw.deletingLastPathComponent()
+        let ext = raw.pathExtension.lowercased()
+        let names = try FileManager.default.contentsOfDirectory(atPath: dir.path).filter { ($0 as NSString).pathExtension.lowercased() == ext }.sorted()
+        let urls = [raw] + names.filter { $0 != raw.lastPathComponent }.prefix(3).map { dir.appendingPathComponent($0) }
+        let samples = urls.compactMap { DecodeProfileFitter.prepare(url: $0) }
+        check(!samples.isEmpty, "\(samples.count)/\(urls.count) photos have a comparable camera JPEG")
+        guard !samples.isEmpty else { return }
+        var reported = 0.0
+        let r = try DecodeProfileFitter.fit(samples: samples, maxEvaluations: 40, progress: { reported = $0 })
+        print("    " + r.summary + " " + DecodeProfileRegistry.json(r.params))
+        check(r.errorAfter <= r.errorBefore, "fit never makes the match worse")
+        check(reported == 1, "progress reaches 1")
+        check(DecodeProfileFitter.dimensions.allSatisfy { d in r.params[keyPath: d.keyPath].map { d.range.contains($0) } ?? false },
+              "every fitted parameter set and within bounds")
+        check(abs(DecodeProfileFitter.error(samples, r.params) - r.errorAfter) < 1e-3, "fitted (rounded) params reproduce the error")
+        var calls = 0
+        do {
+            _ = try DecodeProfileFitter.fit(samples: samples, isCancelled: { calls += 1; return calls > 3 })
+            check(false, "cancel stops the fit")
+        } catch DecodeProfileFitter.FitError.cancelled {
+            check(true, "cancel stops the fit")
+        }
     }
 }

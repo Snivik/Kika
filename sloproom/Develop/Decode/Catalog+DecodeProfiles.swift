@@ -77,6 +77,20 @@ nonisolated extension Catalog {
             .filter { !$0.camera.isEmpty }
     }
 
+    /// Up to `limit` RAW master photos of `camera`, spread evenly over their capture dates
+    /// (Match Camera JPEG fitting).
+    func decodeFitPhotos(camera: CameraKey, limit: Int) throws -> [Photo] {
+        let ids = try db.query("""
+            SELECT id, path FROM photos
+            WHERE master_id IS NULL AND TRIM(COALESCE(camera_make, '')) = ? AND TRIM(COALESCE(camera_model, '')) = ?
+            ORDER BY capture_date, id
+            """, [camera.make, camera.model]) { ($0.int(0), $0.string(1)) }
+            .filter { RenderPipeline.isRAW(url: URL(fileURLWithPath: $0.1)) }.map(\.0)
+        guard ids.count > limit else { return try photos(ids: ids) }
+        let step = Double(ids.count) / Double(limit)
+        return try photos(ids: (0..<limit).map { ids[Int(Double($0) * step)] })
+    }
+
     /// Loads profiles + defaults into `DecodeProfileRegistry.shared` (creating the tables if needed).
     func reloadDecodeRegistry() throws {
         try ensureDecodeProfiles()

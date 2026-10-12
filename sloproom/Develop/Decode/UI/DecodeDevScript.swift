@@ -8,7 +8,8 @@
 //    decode profile <name>|none    choose a profile for this photo
 //    decode default <name>|none    global default;  decode camera <name>|none  = this photo's camera default
 //    decode settings               select Settings > Raw Decode (then `menu Sloproom/Settings…`)
-//    decode dump                   chain, overrides, effective values, profiles
+//    decode fit                    Match Camera JPEG for the open photo's camera (else the catalog's first camera)
+//    decode dump                   chain, overrides, effective values, profiles, fit state
 //
 
 #if DEBUG
@@ -47,10 +48,16 @@ enum DecodeDevScript {
             case "camera":
                 guard let camera = session?.source?.camera else { print("DevScript: no camera"); return }
                 if let id = profileID(rest) { try model.catalog.setCameraDecodeDefault(camera, profileID: id) }
+            case "fit":
+                guard let camera = session?.source?.camera ?? (try? model.catalog.decodeCameras())?.first?.camera else {
+                    print("DevScript: no camera"); return
+                }
+                DecodeFitController.shared.start(camera: camera, catalog: model.catalog)
             case "settings":
                 SettingsNavigation.shared.tab = .rawDecode
             case "dump":
                 print("DevScript decode: profiles \(DecodeProfilesStore.shared.profiles.map(\.name))")
+                print("DevScript decode: fit \(DecodeFitController.shared.state)")
                 if let session {
                     let r = session.resolvedDecode
                     print("DevScript decode: chain \(r.layers.map(\.label)), camera \(session.source?.camera?.displayName ?? "-")")
@@ -58,7 +65,7 @@ enum DecodeDevScript {
                     print("DevScript decode: effective \(DecodeProfileRegistry.json(r.params))")
                 }
             default:
-                print("DevScript: decode expand|set|profile|default|camera|settings|dump")
+                print("DevScript: decode expand|set|profile|default|camera|fit|settings|dump")
             }
         } catch { print("DevScript decode: \(error)") }
     }
