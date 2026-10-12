@@ -56,6 +56,8 @@ struct DevelopSlider: View {
     var step: Double? = nil
     var track: Track = .plain
     var onEditingChanged: (Bool) -> Void = { _ in }
+    /// Tooltip explaining the control (shown on the title, followed by the reset hint).
+    var help: String? = nil
 
     @Environment(\.isEnabled) private var isEnabled
     @State private var text = ""
@@ -73,7 +75,7 @@ struct DevelopSlider: View {
                     .lineLimit(1)
                     .contentShape(Rectangle())
                     .onTapGesture(count: 2) { reset() }
-                    .help("Double-click to reset")
+                    .help(help.map { "\($0)\n\nDouble-click the name to reset." } ?? "Double-click to reset")
                 Spacer(minLength: 4)
                 valueField
             }

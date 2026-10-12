@@ -46,11 +46,15 @@ struct DecodeParamRow: View {
             }
         }
         .disabled(!supported)
-        .help(info.help + "\nNow: " + (isSet ? layerName : inheritedSource ?? defaultName) + ".")
+        .help(tooltip)
     }
 
     private var isSet: Bool { info.isSet(in: layer) }
-    private var defaultName: String { info.isApple ? "Apple's default" : "Sloproom's default" }
+    private var defaultName: String { info.isApple ? "Apple's default for this file" : "Sloproom's default" }
+    /// What the setting does, then where the current value comes from.
+    private var tooltip: String {
+        info.help + "\n\nCurrent value from: " + (isSet ? layerName : inheritedSource ?? defaultName) + "."
+    }
 
     @ViewBuilder private var control: some View {
         switch info.kind {
@@ -66,7 +70,8 @@ struct DecodeParamRow: View {
                           range: range, defaultValue: base,
                           format: .custom { String(format: step < 0.1 ? "%.2f" : "%.1f", $0) },
                           step: step,
-                          onEditingChanged: { if !$0 { onCommit() } })
+                          onEditingChanged: { if !$0 { onCommit() } },
+                          help: tooltip)
         case .toggle(let kp):
             Toggle(info.title, isOn: Binding(get: { layer[keyPath: kp] ?? inherited[keyPath: kp] ?? true },
                                              set: { v in
