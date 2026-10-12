@@ -179,6 +179,11 @@ The import sheet can be driven in the sandboxed app with `import…` DevScript c
   new top section `## <version> — <date>`, written for people: the next patch for fixes, the next minor for
   significant features. The owner reviews it before the push.
 
+## polish_screenshot.swift
+
+README screenshots (`docs/screenshots/`): crop to the window, round its corners, add a soft shadow. Usage in the
+file header.
+
 ## All harnesses
 
 Build from the repo root (engine default set + the extra files listed), run, expect `ALL … PASS…`:
