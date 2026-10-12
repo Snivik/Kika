@@ -73,6 +73,9 @@ final class AppModel {
     var mode: AppMode = .library {
         didSet {
             guard mode != oldValue else { return }
+            #if DEBUG
+            CursorTrace.mark("mode \(mode)")
+            #endif
             if mode == .develop { openDevelopSession() } else { closeDevelopSession() }
         }
     }
@@ -86,6 +89,9 @@ final class AppModel {
     private var observer: NSObjectProtocol?
 
     init(catalog: Catalog) {
+        #if DEBUG
+        CursorTrace.install()
+        #endif
         self.catalog = catalog
         Self.loadDecodeProfiles(catalog)
         PreviewService.shared.configure(catalog: catalog)

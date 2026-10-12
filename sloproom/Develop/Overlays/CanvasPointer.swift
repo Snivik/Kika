@@ -2,30 +2,121 @@
 //  CanvasPointer.swift
 //  sloproom
 //
-//  Pointer (cursor) rules for the Develop canvas and full-screen preview layers.
+//  Pointer (cursor) ownership. ONE place declares a SwiftUI `pointerStyle`: each window root
+//  (`.canvasPointerRoot()` on MainWindowView and FullScreenPreviewView), from `CanvasPointerState`. Canvas
+//  layers (hand tool, crop, mask, white-balance picker) only REPORT the cursor they want while hovered
+//  (`.canvasPointer(_:rank:)`) and withdraw on hover end or removal.
 //
-//  SwiftUI applies a hovered view's `pointerStyle` but doesn't put the arrow back when that view
-//  goes away under a pointer that doesn't move: leaving Develop while zoomed left the zoom / hand
-//  cursor over the whole Library, and a tool change could leave the crop cursor over the image.
-//  Every canvas layer with a pointer style therefore uses `resetsPointerWhenRemoved()`.
-//  The same applies to all transient hover UI: never rely on SwiftUI's "exit" callbacks alone.
-//  `PhotoDropFeedback` (the folder Add / Move / Copy badge) also clears when the mouse button is up.
+//  Why: SwiftUI's pointer bridge resolves a cursor from the hovered region and caches it. When a view with
+//  its own `pointerStyle` is removed under a still pointer (leaving Develop, switching tools), the next
+//  cursor update re-applies the removed view's cursor, and within a single region moving the pointer
+//  never asks again: the zoom / hand cursor stayed over the whole Library (`-debug.cursorTrace YES`,
+//  CanvasPointerDevScript.swift). A root that is never removed and whose VALUE changes takes the bridge's
+//  invalidation path, which updates the cursor at once. Setting NSCursor or adding AppKit cursor rects
+//  beside SwiftUI flickers (the hosting view's cursor updates win), so don't.
+//
+//  The same principle holds for all transient hover UI: tie it to state with an owner that outlives the
+//  views, not to SwiftUI's exit callbacks (`PhotoDropFeedback` also clears on mouse-up).
 //
 
 import AppKit
 import SwiftUI
 
-extension View {
-    /// Puts the arrow back when this view disappears (mode, tool or photo switch under a still pointer).
-    func resetsPointerWhenRemoved() -> some View {
-        onDisappear { NSCursor.arrow.set() }
+/// The cursors canvas layers ask for.
+enum CanvasCursor: Hashable {
+    case zoomIn, grabIdle, grabActive, crosshair
+    /// Crop tool, outside the crop rectangle: drag rotates (straightens).
+    case rotate
+    case resize(Edge)
+
+    enum Edge: Hashable { case top, bottom, leading, trailing, topLeading, topTrailing, bottomLeading, bottomTrailing }
+
+    var pointerStyle: PointerStyle {
+        switch self {
+        case .zoomIn: .zoomIn
+        case .grabIdle: .grabIdle
+        case .grabActive: .grabActive
+        case .crosshair: .rectSelection
+        // A white curved double arrow with a dark outline, readable on both dark and light photos.
+        case .rotate: .image(Image(nsImage: CanvasPointer.rotateImage), hotSpot: .center)
+        case .resize(let e):
+            switch e {
+            case .top: .frameResize(position: .top)
+            case .bottom: .frameResize(position: .bottom)
+            case .leading: .frameResize(position: .leading)
+            case .trailing: .frameResize(position: .trailing)
+            case .topLeading: .frameResize(position: .topLeading)
+            case .topTrailing: .frameResize(position: .topTrailing)
+            case .bottomLeading: .frameResize(position: .bottomLeading)
+            case .bottomTrailing: .frameResize(position: .bottomTrailing)
+            }
+        }
     }
 }
 
-extension PointerStyle {
-    /// Crop tool, outside the crop rectangle: drag rotates (straightens). A white curved double arrow with a dark
-    /// outline, readable on both dark and light photos.
-    static let rotate: PointerStyle = .image(Image(nsImage: CanvasPointer.rotateImage), hotSpot: .center)
+/// Which hovered canvas layers want which cursor; the highest rank wins (a layer drawn above another
+/// ranks higher). A hovered layer that wants no cursor (nil) still wins: it shows the arrow.
+@Observable
+final class CanvasPointerState {
+    static let shared = CanvasPointerState()
+
+    private struct Claim: Equatable { var rank: Int; var cursor: CanvasCursor? }
+    private var claims: [UUID: Claim] = [:]
+
+    var current: CanvasCursor? { claims.values.max { $0.rank < $1.rank }?.cursor }
+
+    func claim(_ id: UUID, _ cursor: CanvasCursor?, rank: Int) {
+        let c = Claim(rank: rank, cursor: cursor)
+        if claims[id] != c { claims[id] = c }
+    }
+
+    func withdraw(_ id: UUID) {
+        if claims[id] != nil { claims[id] = nil }
+    }
+}
+
+extension View {
+    /// The window root's pointer: the winning canvas claim, else the arrow. The only `pointerStyle` in the app.
+    func canvasPointerRoot() -> some View {
+        modifier(CanvasPointerRoot())
+    }
+
+    /// While hovered, this layer wants `cursor` (nil = the arrow). `rank`: higher wins among stacked layers.
+    func canvasPointer(_ cursor: CanvasCursor?, rank: Int) -> some View {
+        modifier(CanvasPointerClaim(cursor: cursor, rank: rank))
+    }
+}
+
+private struct CanvasPointerRoot: ViewModifier {
+    private var state: CanvasPointerState { .shared }
+
+    func body(content: Content) -> some View {
+        content.pointerStyle(state.current?.pointerStyle ?? .default)
+    }
+}
+
+private struct CanvasPointerClaim: ViewModifier {
+    let cursor: CanvasCursor?
+    let rank: Int
+    @State private var id = UUID()
+    @State private var isHovered = false
+
+    func body(content: Content) -> some View {
+        content
+            .onContinuousHover { phase in
+                if case .active = phase {
+                    isHovered = true
+                    CanvasPointerState.shared.claim(id, cursor, rank: rank)
+                } else {
+                    isHovered = false
+                    CanvasPointerState.shared.withdraw(id)
+                }
+            }
+            .onChange(of: cursor) { _, c in
+                if isHovered { CanvasPointerState.shared.claim(id, c, rank: rank) }
+            }
+            .onDisappear { CanvasPointerState.shared.withdraw(id) }
+    }
 }
 
 enum CanvasPointer {

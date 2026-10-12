@@ -39,8 +39,7 @@ struct MaskOverlayView: View {
             Canvas { ctx, _ in draw(&ctx, space: space) }
         }
         .contentShape(Rectangle())
-        .pointerStyle(isBrushing || tool.pendingKind != nil ? .rectSelection : nil)
-        .resetsPointerWhenRemoved()
+        .canvasPointer(isBrushing || tool.pendingKind != nil ? .crosshair : nil, rank: 1)
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .local)
                 .onChanged { value in

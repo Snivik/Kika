@@ -18,8 +18,10 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project slo
   `MemberImportVisibility` (every file imports what it uses: `Foundation`, `CoreGraphics`, `CoreImage`, …).
 - Anything that runs off-main (engine, services, value types) is declared `nonisolated`
   (`nonisolated final class X: @unchecked Sendable`, `nonisolated struct Y: Sendable`).
-- Transient hover UI (cursors, drop badges) must not rely on SwiftUI's exit callbacks alone: canvas layers with a
-  `pointerStyle` use `resetsPointerWhenRemoved()` (`Develop/Overlays/CanvasPointer.swift`), drag feedback clears on mouse-up.
+- Cursors: the only `pointerStyle` is on each window root (`.canvasPointerRoot()`), fed by `CanvasPointerState`;
+  canvas layers report their cursor with `.canvasPointer(_:rank:)`. Never put `pointerStyle` on a view that can be
+  removed, set NSCursor, or add cursor rects (`Develop/Overlays/CanvasPointer.swift`; `-debug.cursorTrace YES` logs
+  every cursor change). Transient drag feedback clears on mouse-up, not only on exit callbacks.
 - App Sandbox ON, user-selected files READ-ONLY (owner will switch to read/write). Don't change entitlements.
 - Headless tests: see `Tools/README.md` (`Tools/harness.sh`, `Tools/foundation_check.swift`,
   sandboxed UI runs with `SLOPROOM_CATALOG_DIR` + `SLOPROOM_DEV_SCRIPT` snapshots, catalog + photos inside the app container. NEVER build with the sandbox disabled).

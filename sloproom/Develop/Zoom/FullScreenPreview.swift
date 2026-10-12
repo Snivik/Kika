@@ -309,6 +309,7 @@ struct FullScreenPreviewView: View {
         }
         .ignoresSafeArea()
         .background(.black)
+        .canvasPointerRoot()   // the window's only pointerStyle (Develop/Overlays/CanvasPointer.swift)
         .zoomEventMonitor(zoom) { FullScreenPreview.shared.isShowing }
         .onChange(of: model.focusedPhotoID) { _, id in preview.focusChanged(to: id) }
         .onChange(of: model.developSession?.zoomDisplaySettings) { _, _ in preview.refreshIfEdited() }

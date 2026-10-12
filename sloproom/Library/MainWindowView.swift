@@ -23,6 +23,7 @@ struct MainWindowView: View {
             case .develop: DevelopView()
             }
         }
+        .canvasPointerRoot()   // the app's only pointerStyle (Develop/Overlays/CanvasPointer.swift)
         .navigationTitle(title)
         .libraryKeyShortcuts(model: model)
         .fullScreenPreviewShortcut(model: model)

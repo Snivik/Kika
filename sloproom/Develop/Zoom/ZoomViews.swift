@@ -47,6 +47,8 @@ struct ZoomedImageLayer: View {
 struct HandToolLayer: View {
     let zoom: ZoomController
     var clickToZoom = true
+    /// Cursor rank (CanvasPointer.swift): the space-bar hand above tool overlays ranks higher.
+    var cursorRank = 0
 
     @State private var last: CGPoint?
     @State private var moved = false
@@ -71,8 +73,7 @@ struct HandToolLayer: View {
                         last = nil
                     }
             )
-            .pointerStyle(zoom.isPanning ? .grabActive : zoom.isZoomed ? .grabIdle : (clickToZoom ? .zoomIn : nil))
-            .resetsPointerWhenRemoved()   // e.g. leaving Develop while zoomed (CanvasPointer.swift)
+            .canvasPointer(zoom.isPanning ? .grabActive : zoom.isZoomed ? .grabIdle : (clickToZoom ? .zoomIn : nil), rank: cursorRank)
     }
 }
 

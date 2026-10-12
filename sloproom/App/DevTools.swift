@@ -190,6 +190,7 @@ enum DevScript {
                 case "vc": await VirtualCopiesDevScript.run(arg, model: model)   // see VirtualCopies/VirtualCopiesDevScript.swift
                 case "act": await ActionsDevScript.run(arg, model: model)   // see Actions/ActionsDevScript.swift
                 case "decode": DecodeDevScript.run(arg, model: model)   // see Develop/Decode/UI/DecodeDevScript.swift
+                case "pointer": await CanvasPointerDevScript.run(arg)   // see Develop/Overlays/CanvasPointerDevScript.swift
                 case let c where IntegrationDevScript.commands.contains(c): IntegrationDevScript.run(c, arg, model: model)
                 case let c where StripDevScript.commands.contains(c): StripDevScript.run(c, arg, model: model)   // Library/Flags/StripDevScript.swift
                 case let c where MaskDevScript.commands.contains(c): MaskDevScript.run(c, arg, session: model.developSession)

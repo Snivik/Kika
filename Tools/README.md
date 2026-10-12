@@ -96,6 +96,8 @@ Snapshots must also be written inside the container. View them with the Read too
   `zoomstats` (events, handler / frame ms avg + max, sharp render after the end), `sidebar` (folder sidebar
   per mode), `rawkey <keyCode> <chars> <ignoringMods> [cmd shift opt ctrl]` (explicit characters, e.g. a
   German ⌘= `rawkey 29 = = cmd shift`). `zoomdump` also prints the controller's window.
+  Cursors (`Develop/Overlays/CanvasPointerDevScript.swift`): `pointer dump`; launch arg `-debug.cursorTrace YES` logs every
+  cursor change with its call stack to `<container>/Data/tmp/cursor-trace.log` (cursor bugs need a real mouse).
   Decode profiles (`Develop/Decode/UI/DecodeDevScript.swift`): `decode expand`, `decode set <param> <v|nil>`,
   `decode profile <name>|none`, `decode default <name>|none`, `decode camera <name>|none`, `decode fit [n]` (Match Camera JPEG on n photos), `decode makes [dump]` (Fill In Camera Makes sheet, Settings open), `decode settings`
   (selects the tab; then `menu Sloproom/Settings…` + `snapwin <png>`), `decode dump`.

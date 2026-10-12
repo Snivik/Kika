@@ -42,8 +42,7 @@ struct CropOverlayView: View {
                 .onContinuousHover { phase in
                     if case .active(let p) = phase { hover = Self.handle(at: p, crop: crop) } else { hover = nil }
                 }
-                .pointerStyle(pointerStyle(drag?.handle ?? hover))
-                .resetsPointerWhenRemoved()
+                .canvasPointer(cursor(drag?.handle ?? hover), rank: 1)
         } else {
             // The uncropped render hasn't arrived yet (or is stale after a turn).
             Color.clear.allowsHitTesting(false)
@@ -122,16 +121,16 @@ struct CropOverlayView: View {
         return crop.contains(p) ? .inside : .outside
     }
 
-    private func pointerStyle(_ handle: CropHandle?) -> PointerStyle? {
+    private func cursor(_ handle: CropHandle?) -> CanvasCursor? {
         switch handle {
-        case .topLeft: .frameResize(position: .topLeading)
-        case .top: .frameResize(position: .top)
-        case .topRight: .frameResize(position: .topTrailing)
-        case .right: .frameResize(position: .trailing)
-        case .bottomRight: .frameResize(position: .bottomTrailing)
-        case .bottom: .frameResize(position: .bottom)
-        case .bottomLeft: .frameResize(position: .bottomLeading)
-        case .left: .frameResize(position: .leading)
+        case .topLeft: .resize(.topLeading)
+        case .top: .resize(.top)
+        case .topRight: .resize(.topTrailing)
+        case .right: .resize(.trailing)
+        case .bottomRight: .resize(.bottomTrailing)
+        case .bottom: .resize(.bottom)
+        case .bottomLeft: .resize(.bottomLeading)
+        case .left: .resize(.leading)
         case .inside: drag == nil ? .grabIdle : .grabActive
         case .outside: .rotate
         case nil: nil

@@ -48,7 +48,7 @@ struct DevelopCanvasView: View {
                             .frame(width: geo.size.width, height: geo.size.height)
                     }
                     if zoom.spaceHeld, session.activeTool != .crop {
-                        HandToolLayer(zoom: zoom)
+                        HandToolLayer(zoom: zoom, cursorRank: 3)
                     }
                     if zoom.isZoomed {
                         ZoomNavigator(image: image, zoom: zoom)
