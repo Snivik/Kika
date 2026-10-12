@@ -122,6 +122,12 @@ nonisolated extension Catalog {
             conditions.append("p.rating >= ?")
             args.append(filter.minRating)
         }
+        if !filter.tags.isEmpty { try ensureTags() }
+        for c in filter.tags {
+            let (clause, tagArgs) = Self.tagSQL(c)
+            conditions.append("(\(clause))")
+            args += tagArgs
+        }
 
         if !conditions.isEmpty { sql += " WHERE " + conditions.joined(separator: " AND ") }
         if case .folder(_, true) = source { sql += " GROUP BY p.id" }

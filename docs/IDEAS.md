@@ -6,6 +6,16 @@ Possible future projects. Not commitments, and not documentation of the current 
 *Done (2026-10-12): per-edit decoder pinning, the calibration UI and Match Camera JPEG are now Decode
 profiles; see ARCHITECTURE.md › Decode profiles.*
 
+## Workflows that tag photos
+
+**Idea.** Run a job over a set of photos (e.g. "is it blurry?", "eyes closed?", "duplicate burst") that writes
+tag values as its own author (`workflow:<name>`), so the owner reviews a small "To Review" set instead of everything.
+
+**What we have (2026-10-12).** Tags with per-author values, effective value, To Review rows and Confirm
+(ARCHITECTURE.md › Tags). Missing: a way to run a workflow (in-app job vs external tool writing the catalog;
+an external writer needs the app to notice changes, e.g. a file presenter or a "Reload" command), and the
+detectors themselves (sharpness from a Laplacian-variance on the preview is a cheap first blur check).
+
 ## Pluggable RAW front end: Apple native or our own decoder and demosaic
 
 **Idea.** Let the user choose, per photo or globally, between Apple's RAW decoding (`CIRAWFilter`, today's

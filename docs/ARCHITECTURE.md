@@ -34,6 +34,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project slo
 | `App/AppModel.swift`, `FolderTree.swift`, `SloproomCommands.swift` | app state, folder tree, menu bar (+ `TextInputGuard`) |
 | `App/DevTools.swift`, `App/IntegrationDevScript.swift` | "Add Folder in Place (Dev)", `DevScript` (DEBUG UI scripting); feature DevScript files live next to their feature |
 | `Catalog/*` | SQLite wrapper, catalog open/migrate, photos / folders / roots / crop-preset API, models, security scope |
+| `Tags/*` | tags on photos and folders: models, catalog API + filter SQL (engine); `Tags/UI/`: store, sidebar section, filter menu + chips, Develop panel, editor, DevScript `tag …` |
 | `Import/*` | SD card / folder import: engine (`ImportEngine`), sheet state (`ImportSession`), sources, sheet UI, recap page (`ImportRecapView`), EXIF reader (`PhotoMetadataReader`) |
 | `LightroomImport/*` | Lightroom Classic catalog import (structure only), root access status / grants (`RootAccess`, `RootsAccessView`) |
 | `Library/*` | main window, grid (day sections: `PhotoDateSections`), cells, filmstrip, sidebar; `ThumbnailView` (the only preview loader) |
@@ -198,6 +199,7 @@ payload `Catalog.change(from: note) -> CatalogChange?`:
 | `.folders` | create/rename/move/delete folder |
 | `.folderMembership(Set<Int64>)` | add/remove/move photos in folders |
 | `.roots`, `.cropPresets` | roots / preset CRUD |
+| `.tags` / `.photoTags(ids)` / `.folderTags` | tag CRUD / photo values / folder values (`Tags/Catalog+Tags`) |
 | `.decodeProfiles` | decode profile CRUD, global / camera defaults (`Develop/Decode/Catalog+DecodeProfiles`; also posts `.photosUpdated` for the edited photos whose resolved decode changed) |
 
 Your own extension methods should call `postChange(_:)` too. `AppModel` coalesces bursts and reloads
@@ -613,6 +615,23 @@ sRGB primaries**, extent `(0,0,W,H)`):
 - `DevelopSlider` gained `track: .plain | .gradient([Color])` (before `onEditingChanged`), an editable value
   field, ⌥-drag fine adjust, double-click title/track to reset. Existing call sites are unchanged.
 - Harness: `Tools/develop_check.swift` (renders every control, invariants, scale consistency, timing).
+
+## Tags (`Tags/`, harness `Tools/tags_check.swift`)
+
+- A tag = name (unique, case-insensitive), colour (`TagColor`), allowed values (default `true, false`), and
+  whether it applies to photos and / or folders. Tables `tags`, `photo_tags`, `folder_tags` (migration `tags.v1`).
+- A value row is (photo or folder, tag, **author**, value, set_at), PK (item, tag, author): single-purpose columns,
+  one value per author. `TagAuthor.user` = the owner; any other author string is a workflow
+  (e.g. `workflow:blur-check`). Effective value = the user's, else the latest workflow value. "To review" =
+  a workflow value and no user value. Confirm = copy the latest workflow value into a user row.
+- Flag and rating stay columns on `photos` (P/U/X path, Lightroom import unchanged) but share the filter UI:
+  `PhotoFilter { flag, minRating, tags: [TagCondition] }`, all ANDed; `Catalog.tagSQL` builds the EXISTS clauses
+  (effective-value row picked by `ORDER BY author = 'user' DESC, set_at DESC`). One condition per tag in the UI.
+- UI: Filter menu + chips (Library bar; Develop toolbar = filmstrip), sidebar Tags section (value rows and
+  To Review = `SidebarItem.tag`, All Photographs + that one condition), Tags submenus (photo context menus,
+  Photo menu, folder context menu), dots on grid / filmstrip / folder rows (filled = yours, ring = suggested),
+  Develop › Tags panel (your value, the suggestion + Confirm). `TagStore` mirrors all values (whole catalog).
+- Changing a tag's values or scope deletes stored values that no longer fit (the editor warns with counts).
 
 ## Decode profiles (`Develop/Decode/`, harness `Tools/decode_check.swift`)
 

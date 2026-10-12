@@ -5,6 +5,22 @@ CI builds the universal app and publishes the top section as its release notes (
 Fix releases bump the patch (0.1.0 → 0.1.1); significant new features bump the minor (→ 0.2.0).
 Newest first; written for people, not commits.
 
+## 0.2.0 — 2026-10-12
+
+**Tags**
+- Tag photos and folders. A tag has a name, a colour and a list of values: true / false for yes-or-no
+  questions like Blurry, or your own choices like Anna / Ben.
+- Each value remembers who set it: you, or a workflow. Your value always wins. Values a workflow suggested and
+  you haven't looked at yet are grouped under To Review, so you can check a small set instead of every photo.
+- The sidebar lists every tag with its values and counts. Tagged photos and folders show coloured dots:
+  filled when you set the value, a ring when it's a suggestion.
+- Set tags from the right-click menu, the Photo menu or the new Tags panel in Develop, where you can also confirm
+  suggestions one photo at a time.
+
+**Filtering**
+- One Filter menu for flags, star ratings and tags, in Library and in Develop's filmstrip. Active filters show
+  as chips you can remove with one click.
+
 ## 0.1.1 — 2026-10-12
 
 **Fixes**

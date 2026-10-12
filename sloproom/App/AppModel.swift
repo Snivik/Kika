@@ -94,6 +94,7 @@ final class AppModel {
         #endif
         self.catalog = catalog
         Self.loadDecodeProfiles(catalog)
+        TagStore.shared.load(catalog)
         PreviewService.shared.configure(catalog: catalog)
         observeCatalog()
         reloadFolders()
@@ -132,6 +133,7 @@ final class AppModel {
         catalog = newCatalog
         RecentRenders.shared.purgeAll()   // photo ids differ between catalogs
         Self.loadDecodeProfiles(newCatalog)
+        TagStore.shared.load(newCatalog)
         PreviewService.shared.configure(catalog: newCatalog)
         observeCatalog()
         selectedSource = .all
@@ -252,6 +254,17 @@ final class AppModel {
         case .decodeProfiles:
             DecodeProfilesStore.shared.reload()
             developSession?.decodeProfilesChanged()
+            return
+        case .tags:
+            TagStore.shared.load(catalog)   // a tag's values or scope changes can drop stored values
+            pruneTagFilter()
+            pendingReloadPhotos = true
+        case .photoTags:
+            TagStore.shared.reloadPhotoValues(catalog)
+            guard !filter.tags.isEmpty else { return }   // only a tag filter changes which photos are shown
+            pendingReloadPhotos = true
+        case .folderTags:
+            TagStore.shared.reloadFolderValues(catalog)
             return
         }
         DispatchQueue.main.async { [weak self] in self?.flushPendingReloads() }

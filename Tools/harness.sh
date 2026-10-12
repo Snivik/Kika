@@ -33,6 +33,7 @@ ENGINE_FILES=(
   "$APP"/Develop/RenderPipeline.swift
   "$APP"/Develop/Stages/*.swift
   "$APP"/Develop/Decode/*.swift
+  "$APP"/Tags/*.swift              # engine only; SwiftUI views live in Tags/UI/
   "$APP"/Develop/Masking/*.swift
   "$APP"/Develop/Adjustments/*.swift
   "$APP"/Develop/Kernels/*.swift

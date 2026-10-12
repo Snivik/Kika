@@ -2,8 +2,9 @@
 //  GridFilterBar.swift
 //  sloproom
 //
-//  Bar above the Library grid: flag filter, "Include Subfolders" (when a folder is shown),
-//  "By Date" grouping, photo / selection count.
+//  Bar above the Library grid: the Filter menu + chips of active conditions (flag, rating, tags;
+//  Tags/UI/PhotoFilterControls.swift), "Include Subfolders" (when a folder is shown), "By Date" grouping,
+//  photo / selection count.
 //
 
 import SwiftUI
@@ -11,20 +12,15 @@ import SwiftUI
 struct GridFilterBar: View {
     @Environment(AppModel.self) private var model
 
-    private static let filters: [FlagFilter] = [.all, .picked, .unflagged, .rejected, .notRejected]
-
     var body: some View {
         @Bindable var model = model
         HStack(spacing: 12) {
-            // Not fixed-size: segments shrink in narrow windows instead of widening the window.
-            Picker("Flag Filter", selection: $model.filter.flag) {
-                ForEach(Self.filters, id: \.self) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 440)
-            .help("Show photos by flag")
-            .segmentHelp(Self.filters.map(\.help))
+            PhotoFilterMenu()
+                .fixedSize()
+            // Chips scroll instead of widening the window.
+            ScrollView(.horizontal, showsIndicators: false) { PhotoFilterChips() }
+                .frame(maxWidth: 520)
+                .fixedSize(horizontal: false, vertical: true)
 
             if model.shownFolderID != nil {
                 Toggle("Subfolders", isOn: $model.includeSubfolders)

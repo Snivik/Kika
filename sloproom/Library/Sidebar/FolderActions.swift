@@ -8,14 +8,23 @@
 
 import Foundation
 
-/// Sidebar rows. "Picked" / "Rejected" are All Photographs + a flag filter, so they need no
-/// extra `PhotoSource` cases.
+/// Sidebar rows. "Picked" / "Rejected" and the tag value rows ("Blurry › true", "› To Review") are All
+/// Photographs + a filter, so they need no extra `PhotoSource` cases.
 enum SidebarItem: Hashable {
     case all
     case lastImport
     case picked
     case rejected
     case folder(Int64)
+    case tag(Int64, TagMatch)
+
+    /// A row that is All Photographs + a filter; leaving it clears that filter.
+    var isSmartSource: Bool {
+        switch self {
+        case .picked, .rejected, .tag: true
+        default: false
+        }
+    }
 }
 
 extension AppModel {
@@ -23,10 +32,16 @@ extension AppModel {
     var sidebarItem: SidebarItem {
         switch selectedSource {
         case .all:
-            switch filter.flag {
-            case .picked: .picked
-            case .rejected: .rejected
-            default: .all
+            if filter.flag == .all, filter.minRating == 0, filter.tags.count == 1, let c = filter.tags.first {
+                .tag(c.tagID, c.match)
+            } else if !filter.tags.isEmpty || filter.minRating > 0 {
+                .all
+            } else {
+                switch filter.flag {
+                case .picked: .picked
+                case .rejected: .rejected
+                default: .all
+                }
             }
         case .lastImport: .lastImport
         case .folder(let id, _): .folder(id)
@@ -37,19 +52,22 @@ extension AppModel {
     /// flag filter they set.
     func selectSidebarItem(_ item: SidebarItem) {
         guard item != sidebarItem else { return }
-        let leavingSmartSource = sidebarItem == .picked || sidebarItem == .rejected
+        let leavingSmartSource = sidebarItem.isSmartSource
         switch item {
         case .picked, .rejected:
-            filter.flag = item == .picked ? .picked : .rejected
+            filter = PhotoFilter(flag: item == .picked ? .picked : .rejected)
+            selectedSource = .all
+        case .tag(let id, let match):
+            filter = PhotoFilter(tags: [TagCondition(tagID: id, match: match)])
             selectedSource = .all
         case .all:
-            if filter.flag == .picked || filter.flag == .rejected { filter.flag = .all }
+            if leavingSmartSource { filter = PhotoFilter() }
             selectedSource = .all
         case .lastImport:
-            if leavingSmartSource { filter.flag = .all }
+            if leavingSmartSource { filter = PhotoFilter() }
             selectedSource = .lastImport
         case .folder(let id):
-            if leavingSmartSource { filter.flag = .all }
+            if leavingSmartSource { filter = PhotoFilter() }
             selectedSource = .folder(id: id, includeSubfolders: includeSubfolders)
         }
     }

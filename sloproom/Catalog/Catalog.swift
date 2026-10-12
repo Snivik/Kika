@@ -27,6 +27,12 @@ nonisolated enum CatalogChange: Sendable, Equatable {
     case cropPresets
     /// Decode profiles or their global / camera defaults (Develop/Decode). The registry is reloaded.
     case decodeProfiles
+    /// Tag definitions (Tags/): created, edited (values may have been dropped), deleted.
+    case tags
+    /// Tag values of these photos changed.
+    case photoTags(Set<Int64>)
+    /// Tag values of folders changed.
+    case folderTags
 }
 
 nonisolated final class Catalog: @unchecked Sendable {

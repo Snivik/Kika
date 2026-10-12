@@ -45,6 +45,7 @@ struct DevelopInspectorView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     if session.activeTool == .mask { MaskPanel(session: session) } // on top while masking
+                    TagsPanel(session: session)   // Tags/UI/TagsPanel.swift
                     RawDecodePanel(session: session)
                     WhiteBalancePanel(session: session)
                     TonePanel(session: session)

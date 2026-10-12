@@ -96,6 +96,9 @@ Snapshots must also be written inside the container. View them with the Read too
   `zoomstats` (events, handler / frame ms avg + max, sharp render after the end), `sidebar` (folder sidebar
   per mode), `rawkey <keyCode> <chars> <ignoringMods> [cmd shift opt ctrl]` (explicit characters, e.g. a
   German ⌘= `rawkey 29 = = cmd shift`). `zoomdump` also prints the controller's window.
+  Tags (`Tags/UI/TagsDevScript.swift`): `tag new <name> [v1,v2] [folders]`, `tag set <name> <value|none> [author]` (action targets;
+  e.g. author `workflow:blur-check`), `tag folder <name> <value> <folder>`, `tag sidebar|filter <name> <value|review>`,
+  `tag confirm`, `tag edit <name>|editnew|close`, `tag dump`.
   Cursors (`Develop/Overlays/CanvasPointerDevScript.swift`): `pointer dump`; launch arg `-debug.cursorTrace YES` logs every
   cursor change with its call stack to `<container>/Data/tmp/cursor-trace.log` (cursor bugs need a real mouse).
   Decode profiles (`Develop/Decode/UI/DecodeDevScript.swift`): `decode expand`, `decode set <param> <v|nil>`,
@@ -168,7 +171,7 @@ The import sheet can be driven in the sandboxed app with `import…` DevScript c
 ## CI and releases
 
 - `ci_checks.sh [out-dir]`: builds and runs the checks that need no sample photos (actions, folders,
-  shortcuts, decode without its RAW render part). GitHub Actions runs it on every push and PR. When a check
+  shortcuts, decode without its RAW render part, tags). GitHub Actions runs it on every push and PR. When a check
   gains or loses its photo dependency, update the list.
 - `build_release.sh <version> [out-dir]`: universal Release build plus zip (default `build/<version>/`).
   `SIGN_IDENTITY=-` gives an ad-hoc signature; leave it unset to get the project's own signing.
@@ -198,6 +201,7 @@ Build from the repo root (engine default set + the extra files listed), run, exp
 | `shortcuts_check` | `HARNESS_NO_DEFAULT=1`, `sloproom/Shortcuts/ShortcutModel.swift sloproom/Shortcuts/ShortcutStore.swift` | – (defaults, overrides persist, conflicts per scope, resolution, reset, formatting; own UserDefaults suite) |
 | `vcopies_check` | `sloproom/VirtualCopies/{Catalog+VirtualCopies,VirtualCopyPreviews}.swift sloproom/Import/Catalog+Import.swift sloproom/LightroomImport/{RootAccess,LightroomCatalogReader,LightroomImportPlan,Catalog+LightroomImport}.swift sloproom/Export/ExportEngine.swift sloproom/Develop/Crop/CropMath.swift` | `[realistic catalog dir to COPY] [sample.jpg] [out-dir]` (defaults: `…/Data/tmp/vcopies/pristine`, `…/Data/tmp/folders/photos/L1090230.JPG`; schema v2 migration of a fresh v1 + the realistic copy, copies, sorting, import dedupe, relink, removal, preview seeding, export names) |
 | `decode_check` | `sloproom/Actions/EditSections.swift` | `[raw] [out-dir]` (default `/Volumes/T9/Lightroom/2026/2026-10-11/P1033881.RW2`, the sunset portrait; decode JSON, seeded profiles, layering + provenance, edit_version invalidation per camera / global / chosen profile, delete clears references, import / export, Recent renders hash; renders: old vs new clip fade on the face, boost 0, knob reset on the shared filter, decoder pin + fallback, camera default; make-less (Lightroom) cameras: identity, gaps, fallback default, fill + default move; Match Camera JPEG sampling (spread, extremes left out, determinism) and on the RAW + 3 neighbours: never worse, bounds, exposure checks, monochrome-style outlier, cancel) |
+| `tags_check` | – | `[out-dir]` (tag definitions, per-author values, effective value / to-review filters incl. folders + subfolders, confirm suggestions, value-list edits, folder tags, cascades; no photos needed, runs in CI) |
 | `actions_check` | `sloproom/Actions/{PhotoActionSpec,EditSections,BulkCrop,Catalog+BulkEdits}.swift sloproom/Shortcuts/ShortcutModel.swift sloproom/Develop/Crop/{CropMath,Catalog+CropPresets}.swift` | `[out-dir]` (registry arity / modes / enablement / shortcut titles + no default-key conflicts, target resolution, Bulk Crop math for every preset × orientation × portrait / landscape / square / rotated / straightened / flipped / EXIF-rotated photo, Paste / Sync section masking, bulk apply + one-step undo / redo on a temp catalog, 2,000-photo timing) |
 
 ## lrmatch_check.swift (Develop sliders vs Lightroom)

@@ -32,6 +32,7 @@ struct PhotoGridCell: View {
                     }
                 }
             HStack(spacing: 4) {
+                TagDots(values: TagStore.shared.photoValues[photo.id])   // Tags/UI/TagViews.swift
                 Text(photo.displayTitle)   // "IMG_1234 · Copy 1" for a virtual copy
                     .lineLimit(1)
                     .truncationMode(.middle)

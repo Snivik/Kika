@@ -73,6 +73,7 @@ private struct FilmstripCell: View {
                     FlagBadge(flag: photo.flag, isHovering: false, size: 16).padding(2)
                 }
                 .overlay(alignment: .topTrailing) { VirtualCopyBadge(photo: photo, size: 16).allowsHitTesting(false).padding(2) }
+                .overlay(alignment: .bottomLeading) { TagDots(values: TagStore.shared.photoValues[photo.id], size: 6).padding(3) }
             Text(photo.displayTitle)
                 .font(.system(size: 10))
                 .lineLimit(1)

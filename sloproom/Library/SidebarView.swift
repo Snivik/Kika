@@ -2,7 +2,8 @@
 //  SidebarView.swift
 //  sloproom
 //
-//  Library sources (All / Previous Import / Picked / Rejected) + the nested folder tree.
+//  Library sources (All / Previous Import / Picked / Rejected), the nested folder tree, and Tags
+//  (Tags/UI/TagsSidebarSection.swift: each tag's values + To Review).
 //
 //  Folder management:
 //  - "+" in the Folders header, ⇧⌘N, or the context menu ("Create Subfolder" on a folder,
@@ -46,6 +47,7 @@ struct SidebarView: View {
                 } header: {
                     FoldersSectionHeader()
                 }
+                TagsSidebarSection()   // Tags/UI/TagsSidebarSection.swift
             }
             .listStyle(.sidebar)
             .contextMenu(forSelectionType: SidebarItem.self) { items in
@@ -91,8 +93,12 @@ struct SidebarView: View {
             Divider()
             Button("Rename") { state.renamingFolderID = id }
             Toggle("Show Photos from Subfolders", isOn: Bindable(model).includeSubfolders)
+            Menu("Tags") { FolderTagMenuItems(folderID: id, model: model) }   // Tags/UI/TagViews.swift
             Divider()
             Button("Delete Folder…") { FolderActions.requestDelete(id, model: model) }
+        } else if case .tag(let id, _)? = items.first, let tag = TagStore.shared.tag(id) {
+            Button("Edit Tag…") { TagStore.shared.editing = tag }
+            Button("Delete Tag…") { TagStore.shared.pendingDeletion = tag }
         } else if items.isEmpty {
             // Right-click on empty space in the sidebar: a top-level folder.
             Button("Create Folder") { FolderActions.newFolder(parentID: nil, model: model) }

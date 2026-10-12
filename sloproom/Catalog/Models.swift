@@ -165,6 +165,10 @@ nonisolated struct PhotoFilter: Hashable, Sendable {
     var flag: FlagFilter = .all
     /// Minimum star rating (0 = no constraint).
     var minRating: Int = 0
+    /// Tag conditions, all must match (Tags/TagModels.swift).
+    var tags: [TagCondition] = []
+
+    var isEmpty: Bool { flag == .all && minRating == 0 && tags.isEmpty }
 }
 
 nonisolated struct PhotoSort: Hashable, Sendable {

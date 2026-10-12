@@ -33,6 +33,10 @@ struct PhotoActionMenuItems: View {
             ForEach(entries.filter { $0.spec.group == group }) { entry in
                 PhotoActionMenuItem(spec: entry.spec, availability: entry.availability, targets: targets, model: model)
             }
+            if group == .flags {
+                Menu("Tags") { PhotoTagMenuItems(ids: targets.ids, model: model) }   // Tags/UI/TagViews.swift
+                    .disabled(targets.ids.isEmpty)
+            }
         }
     }
 
@@ -94,6 +98,8 @@ struct PhotoMenuBarItems: View {
                 }
             }
         }
+        Menu("Tags") { PhotoTagMenuItems(model: model) { model.actionTargetIDs } }   // Tags/UI/TagViews.swift
+            .disabled(targetCount == 0)
         Divider()
         items(.edits)
         ShortcutMenuButton(.beforeAfter) { model.developSession?.showBefore.toggle() }

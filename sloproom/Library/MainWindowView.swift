@@ -31,6 +31,7 @@ struct MainWindowView: View {
         .catalogTransferSheet(model: model)
         .virtualCopySupport(model: model)   // Rename Virtual Copy alert (VirtualCopies/)
         .photoActionSupport(model: model)   // bulk sheets, confirmations, progress (Actions/)
+        .tagEditorSupport(model: model)   // New / Edit Tag sheet, delete confirmation (Tags/)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("Mode", selection: $model.mode) {
@@ -44,11 +45,7 @@ struct MainWindowView: View {
             // Library shows the same filter in GridFilterBar; in Develop it filters the filmstrip.
             if model.mode == .develop {
                 ToolbarItem {
-                    Picker("Flag Filter", selection: $model.filter.flag) {
-                        ForEach(FlagFilter.allCases, id: \.self) { Text($0.title).tag($0) }
-                    }
-                    .pickerStyle(.menu)
-                    .help("Show filmstrip photos by flag")
+                    PhotoFilterMenu(showsCount: true)   // filters the filmstrip
                 }
                 ToolbarItem {
                     PhotoActionsToolbarMenu(model: model)   // Actions/: every photo action in Develop

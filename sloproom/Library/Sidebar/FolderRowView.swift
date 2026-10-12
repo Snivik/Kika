@@ -50,7 +50,14 @@ struct FolderRowView: View {
 
     var body: some View {
         Label {
-            if isRenaming { renameField } else { Text(node.folder.name).lineLimit(1) }
+            if isRenaming {
+                renameField
+            } else {
+                HStack(spacing: 5) {
+                    Text(node.folder.name).lineLimit(1)
+                    TagDots(values: TagStore.shared.folderValues[node.id], size: 7)   // Tags/UI/TagViews.swift
+                }
+            }
         } icon: {
             Image(systemName: node.children.isEmpty ? "folder" : "folder.fill")
         }

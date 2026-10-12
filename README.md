@@ -28,6 +28,7 @@ xattr -dr com.apple.quarantine /Applications/Sloproom.app
 See [CHANGELOG.md](CHANGELOG.md) for what's in each release. In short:
 
 - **Library:** a catalog with folders, picks and rejects, and a filmstrip.
+- **Tags:** on photos and folders, set by you or suggested by a workflow, with a To Review set and one filter for flags, ratings and tags.
 - **Import:** from cards or folders with a review step, or from a Lightroom Classic catalog.
 - **Develop:** Lightroom-calibrated sliders, crop, masks, zoom, and copy/paste/sync settings.
 - **RAW decode profiles:** per photo, per camera or global. A camera profile can be fitted to that camera's own JPEGs.
