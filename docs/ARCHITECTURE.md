@@ -632,7 +632,8 @@ trailing actions); rows are included only while shown. Remembered in `sidebar.se
 - A value row is (photo or folder, tag, **author**, value, set_at), PK (item, tag, author): single-purpose columns,
   one value per author. `TagAuthor.user` = the owner; any other author string is a workflow
   (e.g. `workflow:blur-check`). Effective value = the user's, else the latest workflow value. "To review" =
-  a workflow value and no user value. Confirm = copy the latest workflow value into a user row.
+  a workflow value and no user value. "Untagged" = no row from anyone. Confirm = copy the latest workflow value
+  into a user row.
 - Flag and rating stay columns on `photos` (P/U/X path, Lightroom import unchanged) but share the filter UI:
   `PhotoFilter { flag, minRating, tags: [TagCondition] }`, all ANDed; `Catalog.tagSQL` builds the EXISTS clauses
   (effective-value row picked by `ORDER BY author = 'user' DESC, set_at DESC`). One condition per tag in the UI.

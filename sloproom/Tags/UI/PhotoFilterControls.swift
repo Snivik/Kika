@@ -42,6 +42,8 @@ struct PhotoFilterMenu: View {
                             Divider()
                             toggle("To Review", tag: tag, match: .toReview(nil))
                                 .help("Set by a workflow, not reviewed by you yet")
+                            toggle("Untagged", tag: tag, match: .untagged)
+                                .help("No value from you or a workflow")
                         } label: {
                             Label { Text(tag.name) } icon: { TagMenuIcon(color: tag.color) }
                         }
@@ -117,6 +119,7 @@ extension TagCondition {
         switch match {
         case .value(let v): v.lowercased() == "true" ? tag.name : "\(tag.name): \(v)"
         case .toReview(nil): "\(tag.name): to review"
+        case .untagged: "\(tag.name): untagged"
         case .toReview(let v?): "\(tag.name): \(v), to review"
         }
     }

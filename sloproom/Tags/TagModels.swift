@@ -71,6 +71,8 @@ nonisolated enum TagMatch: Hashable, Sendable {
     case value(String)
     /// Set by a workflow, not (yet) by the user; nil = any value.
     case toReview(String?)
+    /// No value at all, from anyone (e.g. not processed by a workflow yet).
+    case untagged
 }
 
 nonisolated struct TagCondition: Hashable, Sendable {
@@ -84,10 +86,12 @@ nonisolated extension TagValues {
         switch match {
         case .value(let v): effective?.value == v
         case .toReview(let v): needsReview && (v == nil || suggested?.value == v)
+        case .untagged: byAuthor.isEmpty
         }
     }
 }
 
 nonisolated extension Optional where Wrapped == TagValues {
-    func satisfies(_ match: TagMatch) -> Bool { self?.satisfies(match) ?? false }
+    /// No values at all only matches `.untagged`.
+    func satisfies(_ match: TagMatch) -> Bool { self?.satisfies(match) ?? (match == .untagged) }
 }

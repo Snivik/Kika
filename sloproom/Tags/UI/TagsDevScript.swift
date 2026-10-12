@@ -6,9 +6,9 @@
 //    tag new <name> [v1,v2,…] [folders]   create (default values true,false)
 //    tag set <name> <value|none> [author]  on the action targets (author default: user; e.g. workflow:blur-check)
 //    tag folder <name> <value|none> <folder name>
-//    tag sidebar <name> <value|review>     select the sidebar row
+//    tag sidebar <name> <value|review>     select the sidebar row (filter / folderfilter also take untagged)
 //    tag filter <name> <value|review|none> add / remove a filter condition (filter bar)
-//    tag folderfilter <name> <value|review|none> | tag foldertext [text]   the sidebar's folder filter
+//    tag folderfilter <name> <value|review|untagged|none> | tag foldertext [text]   the sidebar folder filter
 //    tag confirm                           confirm suggestions on the action targets
 //    tag edit <name> | tag editnew | tag close   open / close the editor sheet
 //    tag dump                              tags, counts, filter, shown photos
@@ -23,7 +23,7 @@ enum TagsDevScript {
         let store = TagStore.shared
         store.reloadTags(model.catalog)   // commands run back to back; `.tags` notifications arrive async
         func tag(_ name: String) -> Tag? { store.tags.first { $0.name.lowercased() == name.lowercased() } }
-        func match(_ s: String) -> TagMatch { s == "review" ? .toReview(nil) : .value(s) }
+        func match(_ s: String) -> TagMatch { s == "review" ? .toReview(nil) : s == "untagged" ? .untagged : .value(s) }
         switch p.first {
         case "new" where p.count >= 2:
             let values = p.count > 2 ? p[2].split(separator: ",").map(String.init) : Tag.defaultValues

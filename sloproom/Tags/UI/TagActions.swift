@@ -54,7 +54,7 @@ extension AppModel {
             guard let tag = tags.first(where: { $0.id == c.tagID }) else { return false }
             switch c.match {
             case .value(let v), .toReview(let v?): return tag.values.contains(v)
-            case .toReview(nil): return true
+            case .toReview(nil), .untagged: return true
             }
         }
         if kept != filter.tags { filter.tags = kept }

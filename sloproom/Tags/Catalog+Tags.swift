@@ -236,6 +236,8 @@ nonisolated extension Catalog {
                     AND t.rowid = (SELECT e.rowid FROM photo_tags e WHERE e.photo_id = p.id AND e.tag_id = t.tag_id
                                    ORDER BY e.author = ? DESC, e.set_at DESC LIMIT 1))
                 """, [c.tagID, v, user])
+        case .untagged:
+            return ("NOT EXISTS (SELECT 1 FROM photo_tags n WHERE n.photo_id = p.id AND n.tag_id = ?)", [c.tagID])
         case .toReview(let v):
             return ("""
                 EXISTS (SELECT 1 FROM photo_tags w WHERE w.photo_id = p.id AND w.tag_id = ? AND w.author <> ?\(v == nil ? "" : " AND w.value = ?"))

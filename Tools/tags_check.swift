@@ -67,6 +67,7 @@ struct TagsCheck {
         check(try shown([TagCondition(tagID: blurry, match: .value("false"))]) == [ids[1], ids[3]], "Blurry = false")
         check(try shown([TagCondition(tagID: blurry, match: .toReview(nil))]) == [ids[0], ids[2], ids[3]], "to review: any value")
         check(try shown([TagCondition(tagID: blurry, match: .toReview("true"))]) == [ids[0], ids[2]], "to review: true")
+        check(try shown([TagCondition(tagID: blurry, match: .untagged)]) == [ids[5]], "untagged: no value from anyone")
         // A later workflow run changes its mind on 2: the latest workflow value is the effective one.
         try await Task.sleep(for: .milliseconds(20))
         try catalog.setPhotoTag(blurry, value: "false", author: "workflow:second-opinion", for: [ids[2]])
@@ -139,6 +140,8 @@ struct TagsCheck {
         check(r.ids == [trips, japan], "workflow value is the effective value")
         r = filter(.toReview(nil))
         check(r.matching == [japan], "To Review on folders")
+        r = filter(.untagged)
+        check(r.matching == [folder, trips, italy], "Untagged on folders (no rows at all)")
         r = filter(nil, text: "ITA")
         check(r.ids == [trips, italy] && r.matching == [italy], "name filter, case-insensitive; children of a match aren't shown unless they match")
         r = filter(.value("Cara"), text: "x")

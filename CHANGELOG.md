@@ -27,6 +27,8 @@ Newest first; written for people, not commits.
 **Filtering**
 - One Filter menu for flags, star ratings and tags, in Library and in Develop's filmstrip. Active filters show
   as chips you can remove with one click.
+- Filter any tag by "Untagged" to find photos or folders nobody has tagged yet, e.g. ones a workflow hasn't
+  looked at.
 
 ## 0.1.1 — 2026-10-12
 

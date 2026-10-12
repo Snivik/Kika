@@ -45,6 +45,7 @@ struct FolderTagFilterMenu: View {
                     }
                     Divider()
                     toggle("To Review", TagCondition(tagID: tag.id, match: .toReview(nil)))
+                    toggle("Untagged", TagCondition(tagID: tag.id, match: .untagged))
                 } label: {
                     Label { Text(tag.name) } icon: { TagMenuIcon(color: tag.color) }
                 }
