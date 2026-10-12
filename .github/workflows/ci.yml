@@ -23,17 +23,21 @@ concurrency:
 permissions:
   contents: read
 
+# The project file is Xcode 27's format, which the macos-26 images (Xcode ≤ 26.6) can't read; the
+# xcode-27 image (public preview) has Xcode 27.0 27A266a, the same as local builds.
+env:
+  XCODE: /Applications/Xcode_27.0.app
+
 jobs:
   test:
-    runs-on: macos-26
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v5
 
       - name: Select Xcode
         run: |
-          xcode="$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|_rc' | sort -V | tail -1)"
-          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-          "$xcode/Contents/Developer/usr/bin/xcodebuild" -version
+          echo "DEVELOPER_DIR=$XCODE/Contents/Developer" >> "$GITHUB_ENV"
+          "$XCODE/Contents/Developer/usr/bin/xcodebuild" -version
 
       - name: Headless checks
         run: Tools/ci_checks.sh "$RUNNER_TEMP/checks"
@@ -47,7 +51,7 @@ jobs:
   release:
     needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: macos-26
+    runs-on: xcode-27
     permissions:
       contents: write
     steps:
@@ -75,9 +79,8 @@ jobs:
       - name: Select Xcode
         if: steps.version.outputs.release == 'true'
         run: |
-          xcode="$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|_rc' | sort -V | tail -1)"
-          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
-          "$xcode/Contents/Developer/usr/bin/xcodebuild" -version
+          echo "DEVELOPER_DIR=$XCODE/Contents/Developer" >> "$GITHUB_ENV"
+          "$XCODE/Contents/Developer/usr/bin/xcodebuild" -version
 
       - name: Signing certificate
         if: steps.version.outputs.release == 'true'
@@ -91,7 +94,7 @@ jobs:
             exit 0
           fi
           kc="$RUNNER_TEMP/signing.keychain-db"
-          kcpw="$(uuidgen)"
+          kcpw="" # xcode-27 image: a keychain with a password won't unlock (actions/runner-images#14837)
           security create-keychain -p "$kcpw" "$kc"
           security set-keychain-settings -lut 21600 "$kc"
           security unlock-keychain -p "$kcpw" "$kc"
