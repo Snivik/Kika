@@ -4,6 +4,12 @@ Sloproom is in alpha. Every push to `main` that adds a new section here becomes 
 CI builds the universal app and publishes the top section as its release notes (see README → Releases).
 Versions go up one minor per release (0.1.0, 0.2.0, …). Newest first; written for people, not commits.
 
+## 0.2.0 — 2026-10-12
+
+**Fixes**
+- Opening an empty folder no longer crashes the app.
+- After you drag photos onto a folder, the "Add" badge on the folder now goes away.
+
 ## 0.1.0 — 2026-10-12
 
 First release.

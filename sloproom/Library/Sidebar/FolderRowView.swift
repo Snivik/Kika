@@ -71,6 +71,9 @@ struct FolderRowView: View {
             }
         }
         .overlay(alignment: .trailing) { PhotoDropVerbBadge(folderID: node.id) }   // Add / Move / Copy while photos hover
+        .onChange(of: PhotoDropFeedback.shared.folderID) { _, id in
+            if id != node.id && dropZone == .into { dropZone = nil }   // photo drag left or ended without dropExited
+        }
         .badge(model.includeSubfolders && !node.children.isEmpty ? totalCount : directCount)
     }
 

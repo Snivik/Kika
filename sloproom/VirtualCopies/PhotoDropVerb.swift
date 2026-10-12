@@ -82,6 +82,25 @@ final class PhotoDropFeedback {
     func update(_ folderID: Int64?, _ verb: PhotoDropVerb) {
         if self.folderID != folderID { self.folderID = folderID }
         if self.verb != verb { self.verb = verb }
+        if folderID != nil { clearWhenDragEnds() }
+    }
+
+    /// SwiftUI doesn't reliably send `dropExited` (a late `dropUpdated` after `performDrop`, rows
+    /// rebuilt by the drop), which left the badge on the folder. A drag holds the mouse button, so
+    /// once it's up the drag is over. The timer runs in the default run-loop mode only, i.e. not
+    /// during the drag's own event tracking.
+    @ObservationIgnored private var dragEndTimer: Timer?
+
+    private func clearWhenDragEnds() {
+        guard dragEndTimer == nil else { return }
+        dragEndTimer = Timer.scheduledTimer(withTimeInterval: 0.2, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, NSEvent.pressedMouseButtons & 1 == 0 else { return }
+                self.dragEndTimer?.invalidate()
+                self.dragEndTimer = nil
+                self.update(nil, .add)
+            }
+        }
     }
 }
 

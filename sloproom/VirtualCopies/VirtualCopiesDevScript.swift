@@ -16,7 +16,8 @@
 //    vc sourcemask               asks every NSDraggingSource view of the main window for its operation masks
 //    vc droptest <plain|cmd|opt> <folder>   drops the action targets on a sidebar folder through the
 //                                SwiftUI drop destination (fake NSDraggingInfo, copy-only source mask like
-//                                SwiftUI's onDrag), prints the returned operations and the outcome
+//                                SwiftUI's onDrag), prints the returned operations and the outcome, plus
+//                                whether the folder's Add / Move / Copy badge cleared after a late update
 //    vc previews <id>            preview files on disk for a photo id
 //
 
@@ -144,12 +145,14 @@ enum DropTest {
             let prepared = dest.prepareForDragOperation?(info) ?? true
             let performed = prepared && (dest.performDragOperation?(info) ?? false)
             dest.concludeDragOperation?(info)
+            _ = dest.draggingUpdated?(info)   // a late update after the drop (SwiftUI sends these sometimes)
             try? await Task.sleep(for: .milliseconds(600))
+            let badge = PhotoDropFeedback.shared.folderID == nil ? "cleared" : "STUCK"
             let after = (try? model.catalog.photoCount(folderID: folder.id)) ?? -1
             let copiesAfter = (try? model.catalog.virtualCopyCount()) ?? -1
             print("DevScript vc droptest: \(modifier) on \(folderName) (row \(row), \(type(of: dest))) verb=\(verb.rawValue) "
                   + "entered=\(DragMaskProbe.maskNames(entered)) updated=\(DragMaskProbe.maskNames(updated)) performed=\(performed) "
-                  + "folder \(before)→\(after) copies \(copiesBefore)→\(copiesAfter) shown=\(model.photos.count)")
+                  + "folder \(before)→\(after) copies \(copiesBefore)→\(copiesAfter) shown=\(model.photos.count) badge=\(badge)")
             return
         }
         print("DevScript vc droptest: no row accepted the drop for \(folderName)")

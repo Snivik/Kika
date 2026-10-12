@@ -64,7 +64,7 @@ struct LibraryGridView: View {
                     } else {
                         ForEach(model.dateSections) { section in
                             Section {
-                                ForEach(model.photos[section.range]) { cell($0) }
+                                ForEach(photos(in: section)) { cell($0) }
                             } header: {
                                 sectionHeader(section)
                             }
@@ -91,6 +91,13 @@ struct LibraryGridView: View {
         }
     }
 
+    /// The section's photos. Section ids are days, so when the list changes (e.g. to an empty
+    /// folder) SwiftUI can still evaluate a section it kept from the old list against the new
+    /// `photos`: clamp instead of trapping on a stale range.
+    private func photos(in section: PhotoDateSection) -> ArraySlice<Photo> {
+        model.photos[section.range.clamped(to: model.photos.indices)]
+    }
+
     private func cell(_ photo: Photo) -> some View {
         PhotoGridCell(photo: photo,
                       isSelected: model.selection.contains(photo.id),
@@ -111,7 +118,7 @@ struct LibraryGridView: View {
     private func sectionHeader(_ section: PhotoDateSection) -> some View {
         HStack(spacing: 8) {
             Button {
-                let ids = model.photos[section.range].map(\.id)
+                let ids = photos(in: section).map(\.id)
                 if NSEvent.modifierFlags.contains(.command) { model.selection.formUnion(ids) } else { model.selection = Set(ids) }
                 if let first = ids.first, !NSEvent.modifierFlags.contains(.command) || model.focusedPhotoID == nil { model.focusedPhotoID = first }
                 isGridFocused = true
