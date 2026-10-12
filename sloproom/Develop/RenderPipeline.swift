@@ -56,10 +56,15 @@ nonisolated final class RenderSource: @unchecked Sendable {
     let highlightClip: Double
     /// Deterministic per-file seed (grain).
     let seed: UInt32
+    /// EXIF make + model (camera defaults of decode profiles; nil if unknown).
+    let camera: CameraKey?
+    /// CIRAWFilter's untouched per-file defaults (RAW only): every decode knob RawDecodeStage
+    /// doesn't override is reset to these on each render (the filter is shared and mutable).
+    let appleDefaults: AppleRawDefaults?
     let lock = NSLock()
 
     init(url: URL, rawFilter: CIRAWFilter?, image: CIImage?, orientedSize: CGSize, draft: Bool, baselineOffset: Double = 0,
-         highlightClip: Double = 0) {
+         highlightClip: Double = 0, camera: CameraKey? = nil, appleDefaults: AppleRawDefaults? = nil) {
         self.url = url
         self.rawFilter = rawFilter
         self.image = image
@@ -70,6 +75,8 @@ nonisolated final class RenderSource: @unchecked Sendable {
         self.defaultBaselineExposure = rawFilter?.baselineExposure ?? 0
         self.baselineOffset = baselineOffset
         self.highlightClip = highlightClip
+        self.camera = camera ?? rawFilter.flatMap { CameraKey.from(properties: $0.properties) }
+        self.appleDefaults = appleDefaults ?? rawFilter.map { AppleRawDefaults.capture($0) }
         // FNV-1a of the file name: stable across launches (unlike Hasher) and across folders.
         var h: UInt32 = 2166136261
         for b in url.lastPathComponent.utf8 { h = (h ^ UInt32(b)) &* 16777619 }
@@ -98,6 +105,8 @@ nonisolated struct RenderContext: Sendable {
     /// The decode carries scene highlights above 1.0 (RAW with extended dynamic range):
     /// OutputStage rolls them off into 0…1. False for JPEG/HEIC/TIFF sources (already display-referred).
     var extendedRange: Bool = false
+    /// The photo's resolved decode parameters (Develop/Decode); OutputStage reads the shoulder.
+    var decode: DecodeParams = .builtin
     /// The context that will draw this render. Stages use it to eagerly render tiny intermediates
     /// (blurred bases), which keeps full-resolution renders from recomputing the whole graph per tile.
     var ciContext: CIContext = RenderPipeline.context
@@ -153,9 +162,11 @@ nonisolated enum RenderPipeline {
             let native = raw.nativeSize
             let swapped = (5...8).contains(Int(raw.orientation.rawValue))
             let size = swapped ? CGSize(width: native.height, height: native.width) : native
+            let defaults = AppleRawDefaults.capture(raw)   // before anything touches the filter
             let analysis = BaselineExposure.analyze(url: url, raw: raw)
             return RenderSource(url: url, rawFilter: raw, image: nil, orientedSize: size, draft: draft,
-                                baselineOffset: analysis.offset, highlightClip: analysis.highlightClip)
+                                baselineOffset: analysis.offset, highlightClip: analysis.highlightClip,
+                                camera: CameraKey.from(properties: raw.properties), appleDefaults: defaults)
         }
         guard let img = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]) else { return nil }
         let normalized = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
@@ -195,7 +206,8 @@ nonisolated enum RenderPipeline {
         }
         let ctx = RenderContext(fullSize: source.orientedSize, imageSize: image.extent.size,
                                 draft: draft || source.draft, applyCrop: applyCrop, requestedScale: scale * min(proxyScale, 1),
-                                seed: source.seed, extendedRange: source.isRAW, ciContext: ciContext)
+                                seed: source.seed, extendedRange: source.isRAW,
+                                decode: source.resolvedDecode(settings), ciContext: ciContext)
         return applyStages(image, settings: settings, context: ctx)
     }
 

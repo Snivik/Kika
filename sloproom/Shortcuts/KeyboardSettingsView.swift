@@ -13,7 +13,7 @@ import AppKit
 import SwiftUI
 
 enum SettingsTab: String, Hashable {
-    case previews, drives, keyboard
+    case previews, drives, rawDecode, keyboard
 }
 
 /// Selected Settings tab (menu items open a specific tab).

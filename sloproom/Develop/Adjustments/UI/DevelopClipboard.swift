@@ -5,7 +5,7 @@
 //  Copy Settings / Paste Settings (⇧⌘C / ⇧⌘V) between photos — registry actions of the photo
 //  actions primitive (Actions/PhotoActions.swift): Copy (one photo) copies ALL its settings;
 //  Paste (one or more photos) applies the sections chosen in "Choose Settings to Paste…"
-//  (`pasteSections`, remembered; default: white balance, tone, presence, color mixer, effects —
+//  (`pasteSections`, remembered; default: raw decode, white balance, tone, presence, color mixer, effects —
 //  crop/geometry and masks excluded, the target keeps its own). Pasting onto several photos is
 //  a bulk edit (one undo step); onto the photo open in Develop, one Develop undo step.
 //

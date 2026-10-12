@@ -10,12 +10,13 @@
 import Foundation
 
 nonisolated enum EditSection: String, CaseIterable, Sendable, Hashable, Identifiable {
-    case whiteBalance, tone, presence, colorMixer, effects, masks, cropRotate
+    case rawDecode, whiteBalance, tone, presence, colorMixer, effects, masks, cropRotate
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .rawDecode: "Raw Decode"
         case .whiteBalance: "White Balance"
         case .tone: "Tone"
         case .presence: "Presence"
@@ -28,6 +29,7 @@ nonisolated enum EditSection: String, CaseIterable, Sendable, Hashable, Identifi
 
     var help: String {
         switch self {
+        case .rawDecode: "Decode profile, decode overrides and pinned decoder version (RAW)"
         case .whiteBalance: "Temperature, tint (As Shot / Custom)"
         case .tone: "Exposure, contrast, highlights, shadows, whites, blacks"
         case .presence: "Texture, clarity, dehaze, vibrance, saturation"
@@ -40,9 +42,9 @@ nonisolated enum EditSection: String, CaseIterable, Sendable, Hashable, Identifi
 
     /// Paste Settings until the user chooses otherwise: the global adjustments (what Copy / Paste
     /// Settings always copied; the target keeps its own crop and masks).
-    static let pasteDefault: Set<EditSection> = [.whiteBalance, .tone, .presence, .colorMixer, .effects]
+    static let pasteDefault: Set<EditSection> = [.rawDecode, .whiteBalance, .tone, .presence, .colorMixer, .effects]
     /// Sync Settings: everything but the crop.
-    static let syncDefault: Set<EditSection> = [.whiteBalance, .tone, .presence, .colorMixer, .effects, .masks]
+    static let syncDefault: Set<EditSection> = [.rawDecode, .whiteBalance, .tone, .presence, .colorMixer, .effects, .masks]
 
     /// Persisted as a comma-separated list of raw values.
     static func decode(_ string: String?) -> Set<EditSection>? {
@@ -61,6 +63,7 @@ nonisolated extension EditSettings {
         var out = self
         for section in sections {
             switch section {
+            case .rawDecode: out.decode = source.decode
             case .whiteBalance: out.whiteBalance = source.whiteBalance
             case .tone: out.tone = source.tone
             case .presence: out.presence = source.presence

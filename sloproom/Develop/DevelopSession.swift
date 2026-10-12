@@ -341,6 +341,7 @@ final class DevelopSession {
         guard hasUnsavedChanges else { return }
         hasUnsavedChanges = false
         saveTask?.cancel()
+        pinDecoderVersionIfNeeded()
         let catalog = catalog, id = photo.id, settings = settings
         Self.saveQueue.async {
             _ = try? catalog.saveEditSettings(settings, for: id)
@@ -357,6 +358,38 @@ final class DevelopSession {
         finalRenderTask?.cancel()
         // Drop this photo's cached intermediates (decoded RAW etc.).
         RenderPipeline.interactiveContext.clearCaches()
+    }
+
+    // MARK: - Decode profiles (Develop/Decode)
+
+    /// The photo's decode chain (profiles may change at any time: read `DecodeProfilesStore.shared.revision` to refresh).
+    var resolvedDecode: ResolvedDecode {
+        DecodeProfileRegistry.shared.resolve(settings.decode, camera: source?.camera ?? photo.cameraKey)
+    }
+
+    /// A profile or default changed: the same settings may now render differently.
+    func decodeProfilesChanged() {
+        // A deleted profile: the catalog already cleared the reference; don't write it back.
+        if let id = settings.decode.profileID, DecodeProfileRegistry.shared.profile(id: id) == nil {
+            var cleared = settings
+            cleared.decode.profileID = nil
+            adoptExternalSettings(cleared)
+        }
+        renderedKey = nil
+        requestRender()
+    }
+
+    /// First save of an edited RAW: pin the decoder version it was edited with, so a later macOS
+    /// decoder doesn't silently change it. Not an undo step (undo goes back to the unpinned
+    /// settings, and the next save pins again).
+    private func pinDecoderVersionIfNeeded() {
+        guard let defaults = source?.appleDefaults, !defaults.newestDecoder.isEmpty,
+              settings.decode.decoderVersion == nil, !settings.isEmpty else { return }
+        isApplyingUndo = true
+        isAdoptingExternalSettings = true
+        settings.decode.decoderVersion = defaults.newestDecoder
+        isAdoptingExternalSettings = false
+        isApplyingUndo = false
     }
 
     // MARK: - Undo

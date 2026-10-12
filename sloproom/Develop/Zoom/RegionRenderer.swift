@@ -38,6 +38,8 @@ nonisolated final class RegionRenderer: @unchecked Sendable {
         let scale: CGFloat
         let whiteBalance: WhiteBalance
         let exposure: Double
+        let decode: DecodeParams
+        let decoderVersion: String?
     }
 
     private let lock = NSLock()
@@ -81,7 +83,8 @@ nonisolated final class RegionRenderer: @unchecked Sendable {
         var usedCache = false
         if settings.usesLocalOperations {
             let key = DecodeKey(source: ObjectIdentifier(source), scale: scale, whiteBalance: settings.whiteBalance,
-                                exposure: settings.tone.exposure)
+                                exposure: settings.tone.exposure, decode: source.resolvedDecode(settings),
+                                decoderVersion: settings.decode.decoderVersion)
             lock.lock()
             let hit = cachedKey == key ? cachedDecode : nil
             lock.unlock()
@@ -100,7 +103,7 @@ nonisolated final class RegionRenderer: @unchecked Sendable {
         }
         let rc = RenderContext(fullSize: source.orientedSize, imageSize: decoded.extent.size, draft: false,
                                applyCrop: applyCrop, requestedScale: scale, seed: source.seed,
-                               extendedRange: source.isRAW, ciContext: ctx)
+                               extendedRange: source.isRAW, decode: source.resolvedDecode(settings), ciContext: ctx)
         let full = RenderPipeline.applyStages(decoded, settings: settings, context: rc)
         let extent = full.extent
         guard !extent.isInfinite, extent.width > 0, extent.height > 0 else { return nil }

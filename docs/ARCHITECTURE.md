@@ -26,7 +26,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project slo
 
 | Path | What |
 |---|---|
-| `App/sloproomApp.swift` | scene: main `Window` (+ `SloproomCommands`, `PreviewCommands`, …), `Settings` (`SettingsRootView`: tabs Previews, Drives, Keyboard) |
+| `App/sloproomApp.swift` | scene: main `Window` (+ `SloproomCommands`, `PreviewCommands`, …), `Settings` (`SettingsRootView`: tabs Previews, Drives, Raw Decode, Keyboard) |
 | `App/AppModel.swift`, `FolderTree.swift`, `SloproomCommands.swift` | app state, folder tree, menu bar (+ `TextInputGuard`) |
 | `App/DevTools.swift`, `App/IntegrationDevScript.swift` | "Add Folder in Place (Dev)", `DevScript` (DEBUG UI scripting); feature DevScript files live next to their feature |
 | `Catalog/*` | SQLite wrapper, catalog open/migrate, photos / folders / roots / crop-preset API, models, security scope |
@@ -194,6 +194,7 @@ payload `Catalog.change(from: note) -> CatalogChange?`:
 | `.folders` | create/rename/move/delete folder |
 | `.folderMembership(Set<Int64>)` | add/remove/move photos in folders |
 | `.roots`, `.cropPresets` | roots / preset CRUD |
+| `.decodeProfiles` | decode profile CRUD, global / camera defaults (`Develop/Decode/Catalog+DecodeProfiles`; also posts `.photosUpdated` for the edited photos whose resolved decode changed) |
 
 Your own extension methods should call `postChange(_:)` too. `AppModel` coalesces bursts and reloads
 (`.roots` reloads photos too: root ids change when a granted parent folder replaces inner roots).
@@ -479,6 +480,7 @@ survives saving).
 | `effects` | `vignetteAmount` -100…100, `vignetteMidpoint` 0…100 (50), `vignetteRoundness` -100…100, `vignetteFeather` 0…100 (50), `grainAmount` 0…100, `grainSize` 0…100 (25), `grainRoughness` 0…100 (50) |
 | `geometry` | `quarterTurns` 0…3 clockwise, `flipHorizontal`, `straightenAngle` -45…45° clockwise, `crop: NormRect` (full), `cropPresetID: Int64?`, `aspectLocked` |
 | `masks: [Mask]` | `Mask {id, name, isEnabled, inverted, shape: MaskShape, adjustments: LocalAdjustments}` applied in order |
+| `decode` | `DecodeSettings {profileID: Int64?, overrides: DecodeParams, decoderVersion: String?}` — RAW decode calibration, see Decode profiles. `isDefault` ignores `decoderVersion` (a pin alone isn't an edit, but makes the settings non-empty) |
 
 - `MaskShape`: `.linear(LinearGradientMask {start, end})` (full effect at start → none at end),
   `.radial(RadialGradientMask {center, radiusX (× source width), radiusY (× source height), rotation° clockwise, feather 0…100})`,
@@ -531,7 +533,8 @@ Stage order (fixed), one file each in `Develop/Stages/`, all `nonisolated enum` 
 static func apply(_ image: CIImage, settings: EditSettings, context: RenderContext) -> CIImage
 ```
 
-1. `RawDecodeStage.apply(source:settings:scale:draft:)` — decode, WB (asShot → camera neutral; custom →
+1. `RawDecodeStage.apply(source:settings:scale:draft:)` — decode with the photo's resolved decode profile
+   (every CIRAWFilter knob set on each render: resolved value, else `RenderSource.appleDefaults`), WB (asShot → camera neutral; custom →
    `neutralTemperature/neutralTint`; non-RAW: `CITemperatureAndTint` relative to 6500 K), exposure,
    scale; output extent `(0,0,W,H)`. **Implemented.**
 2. `ToneStage` — contrast/highlights/shadows/whites/blacks (not exposure). **Implemented.**
@@ -544,7 +547,8 @@ static func apply(_ image: CIImage, settings: EditSettings, context: RenderConte
    output = round(full-res crop size × `requestedScale`) px, exact aspect ±1 px).
 7. `EffectsStage` — post-crop vignette + grain relative to final extent. **Implemented.**
 8. `OutputStage` — RAW only (`RenderContext.extendedRange`): rolls the extended range above 1.0 off
-   into 0…1 (per-channel shoulder in P, knee P 0.86, half of the input hue re-imposed: `OutputStage.hueKeep` 0.5). Replaces CIRAWFilter's SDR clip.
+   into 0…1 (per-channel shoulder in P, knee P 0.86, half of the input hue re-imposed: `OutputStage.hueKeep` 0.5;
+   both from `RenderContext.decode` = the resolved decode profile). Replaces CIRAWFilter's SDR clip.
 
 `LocalAdjustmentRenderer.apply(_ image: CIImage, _ adj: LocalAdjustments, context: RenderContext) -> CIImage`
 (pass the stage's `context` through so eager intermediates use the right CIContext).
@@ -563,7 +567,7 @@ sRGB primaries**, extent `(0,0,W,H)`):
 
 | Stage | Works in | Notes |
 |---|---|---|
-| RawDecodeStage | camera space → linear | CIRAWFilter: demosaic, WB, `exposure` + `baselineExposure` in **scene-linear** light, then its base tone curve (boost) → **display-referred linear** with `extendedDynamicRangeAmount = 2`: 1.0 = diffuse white, highlights above it are KEPT (up to ≈ 2 stops; ~linear in exposure) instead of clipped. Partially clipped raw highlights fade to neutral towards the raw clip level (`RenderSource.highlightClip`). Non-RAW: decoded to linear sRGB (≤ 1, no roll-off). |
+| RawDecodeStage | camera space → linear | CIRAWFilter: demosaic, WB, `exposure` + `baselineExposure` in **scene-linear** light, then its base tone curve (boost) → **display-referred linear** with `extendedDynamicRangeAmount = 2`: 1.0 = diffuse white, highlights above it are KEPT (up to ≈ 2 stops; ~linear in exposure) instead of clipped. Partially clipped raw highlights fade to neutral between 1.0× and 1.6× the raw clip level (`RenderSource.highlightClip`; `RawDecodeStage.clipNeutralStart/End`, decode profiles override; before Oct 2026 0.2…0.75, which bleached bright saturated colour such as sunset skin). Non-RAW: decoded to linear sRGB (≤ 1, no roll-off). |
 | ToneStage | perceptual luminance P = Y^(1/2.2) | contrast = power curve in P around 0.46; highlights/shadows = EV gains from the log2 luminance of an edge-aware (guided-filter) base (Lightroom-like power-law compression/expansion around a pivot, constants in `AdjustmentOps.ToneModel`), applied back as a luminance ratio (hue kept); whites/blacks |
 | PresenceStage | P (texture = unsharp mask, clarity = large edge-aware base), P-encoded channels (dehaze: haze model with dark-channel transmission), Oklab (vibrance, saturation) | constants in `AdjustmentOps.PresenceModel` |
 | ColorMixerStage | OkLCh | 8 band centers, smooth partition-of-unity falloff |
@@ -605,6 +609,60 @@ sRGB primaries**, extent `(0,0,W,H)`):
 - `DevelopSlider` gained `track: .plain | .gradient([Color])` (before `onEditingChanged`), an editable value
   field, ⌥-drag fine adjust, double-click title/track to reset. Existing call sites are unchanged.
 - Harness: `Tools/develop_check.swift` (renders every control, invariants, scale consistency, timing).
+
+## Decode profiles (`Develop/Decode/`, harness `Tools/decode_check.swift`)
+
+RAW decode calibration: Apple's `CIRAWFilter` knobs plus Sloproom's own front-end constants, in layers
+where each layer only overrides what it sets (`nil` = inherit):
+
+```
+built-in (Apple's per-file defaults + DecodeParams.builtin)
+  ← global default profile ← camera default profile (EXIF make + model)
+  ← the photo's chosen profile (decode.profileID) ← the photo's overrides (decode.overrides)
+```
+
+- `DecodeParams` (all optional, stable JSON keys): Apple — `boost` (boostAmount 0…1), `boostShadow` (0…2),
+  `shadowBias`, `luminanceNoiseReduction`, `colorNoiseReduction`, `sharpness`, `localContrast` (contrastAmount),
+  `detail` (0…3), `moireReduction`, `localToneMap`, `highlightRecovery` (macOS 26+), `gamutMapping`,
+  `lensCorrection`; Sloproom — `cameraMatchedBrightness` (BaselineExposure offset on/off), `baselineOffset` (EV),
+  `highlightNeutralStart/End` (clip fade, × raw clip level), `shoulderKnee`, `shoulderHueKeep`. Apple values
+  default to "Auto" (nil) because Apple picks several per file (noise reduction by ISO…). `DecodeParamInfo.all`
+  describes every field (title, help, group, range, key path) for UI / merging / harnesses; `overlaid(by:)` merges.
+- `DecodeSettings` (the `EditSettings.decode` section) — `profileID`, `overrides`, `decoderVersion` (pinned:
+  `DevelopSession` stamps the newest decoder on the first save of an edited RAW, so a macOS update can't change
+  edited photos; unknown versions fall back to the newest). Copy / paste / sync section `EditSection.rawDecode`
+  (in the paste and sync defaults).
+- `CameraKey(make:model:)` (trimmed like the catalog columns; `displayName` drops a repeated make),
+  `Photo.cameraKey`, `RenderSource.camera` (from the RAW's TIFF properties).
+- `AppleRawDefaults.capture(raw)` — `RenderSource.appleDefaults`: values, supported knobs, decoder versions,
+  read from the untouched filter in `makeSource` (before BaselineExposure touches it).
+- `DecodeProfileRegistry.shared` (thread-safe snapshot of the catalog's profiles + defaults; the pipeline
+  resolves through it on any thread): `resolve(_:camera:) -> ResolvedDecode {layers, params}` (layers for
+  provenance: `source(of:)`, `inheritedParams()`), `signature` (part of the Recent renders hash),
+  `RenderSource.resolvedDecode(settings)`. Loaded by `AppModel` when a catalog opens / is replaced.
+- Catalog (`Catalog+DecodeProfiles.swift`, feature migrations `decode.profiles.v1` + `.seed.v1`):
+  `decode_profiles(id, name, camera_make, camera_model, params JSON, notes, sort_order, created_at, updated_at)`,
+  `decode_defaults(camera_make, camera_model, profile_id)` (('', '') = global). Seeds: Flat for Editing (boost 0),
+  Clean High ISO, Maximum Detail, Previous Highlights (before Oct 2026) (the old 0.2…0.75 clip fade).
+  API: `ensureDecodeProfiles`, `reloadDecodeRegistry`, `allDecodeProfiles`, `decodeDefaults`, `decodeCameras`,
+  `create/update/delete/duplicateDecodeProfile`, `setGlobalDecodeDefault`, `setCameraDecodeDefault`,
+  `importDecodeProfiles(DecodeProfileFile)`, `uniqueDecodeProfileName`, `photosUsingDecodeProfile`.
+  **Live links**: every mutation reloads the registry, then bumps `edit_version` of exactly the edited RAW photos
+  whose resolved params changed (old settings under old profiles vs new under new) → their previews regenerate;
+  posts `.photosUpdated(those)` + `.decodeProfiles`. Deleting a profile clears photo references to it. Unedited
+  photos need nothing (thumbnails = camera JPEG; Develop resolves live).
+- Files: `DecodeProfileFile` (`.sloproomdecode`, JSON `{format: "sloproom.decodeProfiles", version: 1,
+  exportedAt, profiles: [{name, cameraMake?, cameraModel?, notes?, params}]}`); import makes names unique.
+- UI (`Develop/Decode/UI/`): `DecodeProfilesStore.shared` (@Observable mirror + `revision`, reloaded on
+  `.decodeProfiles`); `RawDecodePanel` (Develop inspector, first panel, RAW only, collapsed by default:
+  profile picker, chain, every knob as an override of this photo with its inherited source, decoder picker,
+  Save as Profile…, More ▸ Update profile / Use as camera default / Clear overrides / Manage Profiles…);
+  `DecodeProfilesSettingsView` (Settings > Raw Decode: global + per-camera defaults, profile list + editor
+  (debounced live saves), duplicate / delete (with usage count) / import / export); `DecodeParamRow` (one
+  knob editing one layer: setting it back to the inherited value or Reset clears it). DevScript `decode …`.
+- Region renders (`RegionRenderer`) key their cached decode on the resolved params + decoder version.
+- Still to do: "Match camera JPEG" fitting of a camera profile; brightness matching (`BaselineExposure`) is
+  measured at Apple's default curve, so profiles with a different `boost` render darker / brighter.
 
 ## Masks (`Develop/Masking/*`, `Stages/MaskStage`, `Panels/MaskPanel`, `Overlays/MaskOverlayView`)
 

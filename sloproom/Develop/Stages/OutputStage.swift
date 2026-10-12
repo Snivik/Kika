@@ -19,18 +19,19 @@ import CoreGraphics
 import CoreImage
 
 nonisolated enum OutputStage {
-    /// Shoulder knee in perceptual units (P 0.86 ≈ 72 % linear ≈ L* 88).
+    /// Built-in shoulder knee in perceptual units (P 0.86 ≈ 72 % linear ≈ L* 88); decode profiles
+    /// may override it and `hueKeep` (`DecodeParams.shoulderKnee / shoulderHueKeep`).
     static let knee: Double = 0.86
     /// How much of the input hue is re-imposed after the per-channel curve (0 = plain per-channel).
     nonisolated(unsafe) static var hueKeep: Double = 0.5   // calibration harness may change it
 
     static func apply(_ image: CIImage, settings: EditSettings, context: RenderContext) -> CIImage {
         guard context.extendedRange else { return image }
-        return rollOff(image)
+        return rollOff(image, knee: context.decode.shoulderKnee ?? knee, hueKeep: context.decode.shoulderHueKeep ?? hueKeep)
     }
 
     /// The shoulder alone (also usable on any extended-range linear image).
-    static func rollOff(_ image: CIImage) -> CIImage {
-        DevelopKernels.apply(DevelopKernels.shoulder, image, [knee, hueKeep])
+    static func rollOff(_ image: CIImage, knee: Double = OutputStage.knee, hueKeep: Double = OutputStage.hueKeep) -> CIImage {
+        DevelopKernels.apply(DevelopKernels.shoulder, image, [knee.clamped(to: 0.5...0.99), hueKeep.clamped(to: 0...1)])
     }
 }

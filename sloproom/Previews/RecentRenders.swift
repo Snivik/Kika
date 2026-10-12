@@ -56,14 +56,17 @@ nonisolated struct RecentRenderKey: Hashable, Sendable {
         photoID = id; settingsHash = hash; boxWidth = w; boxHeight = h
     }
 
-    /// Hash of everything that decides how a render looks apart from its size: the edit settings
-    /// and the app build (a rebuilt render pipeline may render differently).
+    /// Hash of everything that decides how a render looks apart from its size: the edit settings,
+    /// the decode profiles (Develop/Decode) and the app build (a rebuilt render pipeline may render differently).
     static func settingsHash(_ settings: EditSettings) -> UInt64 {
         var h: UInt64 = 0xcbf29ce484222325
         func mix(_ s: String) { for b in s.utf8 { h = (h ^ UInt64(b)) &* 0x100000001b3 } }
         mix(RecentRenders.buildSignature)
         mix("|")
         mix(settings.jsonString() ?? "")
+        // Decode profiles are referenced live: any profile / default change re-keys every render.
+        mix("|")
+        mix(DecodeProfileRegistry.shared.signature)
         return h
     }
 }

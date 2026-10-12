@@ -13,11 +13,12 @@ struct InspectorSection<Content: View>: View {
     @ViewBuilder let content: () -> Content
     @AppStorage private var isExpanded: Bool
 
-    init(_ title: String, id: String? = nil, onReset: (() -> Void)? = nil, @ViewBuilder content: @escaping () -> Content) {
+    init(_ title: String, id: String? = nil, expandedByDefault: Bool = true, onReset: (() -> Void)? = nil,
+         @ViewBuilder content: @escaping () -> Content) {
         self.title = title
         self.onReset = onReset
         self.content = content
-        _isExpanded = AppStorage(wrappedValue: true, "develop.section.\(id ?? title).expanded")
+        _isExpanded = AppStorage(wrappedValue: expandedByDefault, "develop.section.\(id ?? title).expanded")
     }
 
     var body: some View {

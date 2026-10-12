@@ -87,6 +87,7 @@ final class AppModel {
 
     init(catalog: Catalog) {
         self.catalog = catalog
+        Self.loadDecodeProfiles(catalog)
         PreviewService.shared.configure(catalog: catalog)
         observeCatalog()
         reloadFolders()
@@ -124,12 +125,19 @@ final class AppModel {
         pendingReloadFolders = false
         catalog = newCatalog
         RecentRenders.shared.purgeAll()   // photo ids differ between catalogs
+        Self.loadDecodeProfiles(newCatalog)
         PreviewService.shared.configure(catalog: newCatalog)
         observeCatalog()
         selectedSource = .all
         filter = PhotoFilter()
         reloadFolders()
         reloadPhotos()
+    }
+
+    /// Decode profiles must be in the registry before anything renders (previews, Develop).
+    private static func loadDecodeProfiles(_ catalog: Catalog) {
+        do { try catalog.reloadDecodeRegistry() } catch { print("Decode profiles: \(error)") }
+        DecodeProfilesStore.shared.reload()
     }
 
     /// Opens the default catalog; aborts with a clear message if impossible.
@@ -234,6 +242,10 @@ final class AppModel {
             // Photos' root_id may have changed (a granted parent folder replaces inner roots).
             pendingReloadPhotos = true
         case .cropPresets:
+            return
+        case .decodeProfiles:
+            DecodeProfilesStore.shared.reload()
+            developSession?.decodeProfilesChanged()
             return
         }
         DispatchQueue.main.async { [weak self] in self?.flushPendingReloads() }

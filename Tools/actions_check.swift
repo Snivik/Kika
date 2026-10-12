@@ -199,6 +199,7 @@ struct ActionsCheck {
         src.whiteBalance.mode = .custom; src.whiteBalance.temperature = 4100
         src.tone.exposure = 1.2; src.presence.clarity = 30; src.colorMixer[.blue].saturation = -40
         src.effects.vignetteAmount = -20
+        src.decode.overrides.boost = 0.5
         src.masks = [testMask()]
         src.geometry.crop = NormRect(x: 0.1, y: 0.1, width: 0.5, height: 0.8); src.geometry.quarterTurns = 1
         var dst = EditSettings()

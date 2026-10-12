@@ -31,7 +31,7 @@ struct sloproomApp: App {
     }
 }
 
-/// Settings window: Previews, Drives, Keyboard (the selected tab is `SettingsNavigation.shared.tab`
+/// Settings window: Previews, Drives, Raw Decode, Keyboard (the selected tab is `SettingsNavigation.shared.tab`
 /// so menu items can open a specific tab).
 struct SettingsRootView: View {
     @Bindable private var navigation = SettingsNavigation.shared
@@ -49,6 +49,9 @@ struct SettingsRootView: View {
                 }
                 .frame(minWidth: 520, minHeight: 280)
             }
+            Tab("Raw Decode", systemImage: "camera.aperture", value: SettingsTab.rawDecode) {
+                DecodeProfilesSettingsView()
+            }
             Tab("Keyboard", systemImage: "keyboard", value: SettingsTab.keyboard) {
                 KeyboardSettingsView()
             }
@@ -56,6 +59,7 @@ struct SettingsRootView: View {
         .toolbarHelp([
             "Previews": "Preview sizes, quality, Develop render cache, cache size",
             "Drives": "Folders and drives Sloproom may read; grant access or relink",
+            "Raw Decode": "Decode profiles: global and per-camera defaults, edit, import and export",
             "Keyboard": "Keyboard shortcuts: view and change them",
         ])
     }

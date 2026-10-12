@@ -32,6 +32,7 @@ ENGINE_FILES=(
   "$APP"/Develop/CanvasGeometry.swift
   "$APP"/Develop/RenderPipeline.swift
   "$APP"/Develop/Stages/*.swift
+  "$APP"/Develop/Decode/*.swift
   "$APP"/Develop/Masking/*.swift
   "$APP"/Develop/Adjustments/*.swift
   "$APP"/Develop/Kernels/*.swift

@@ -35,6 +35,8 @@ nonisolated struct EditSettings: Codable, Equatable, Sendable {
     var geometry = Geometry()
     /// Local adjustments, applied in array order.
     var masks: [Mask] = []
+    /// RAW decode calibration: profile reference, overrides, pinned decoder (Develop/Decode).
+    var decode = DecodeSettings()
 
     init() {}
 
@@ -48,12 +50,13 @@ nonisolated struct EditSettings: Codable, Equatable, Sendable {
         effects = c.decode(.effects, default: Effects())
         geometry = c.decode(.geometry, default: Geometry())
         masks = c.decode(.masks, default: [])
+        decode = c.decode(.decode, default: DecodeSettings())
     }
 
     /// True when rendering these settings equals rendering the original.
     var isDefault: Bool {
         whiteBalance.isDefault && tone.isDefault && presence.isDefault && colorMixer.isDefault
-            && effects.isDefault && geometry.isDefault && masks.allSatisfy { !$0.isEnabled || $0.adjustments.isDefault }
+            && effects.isDefault && geometry.isDefault && decode.isDefault && masks.allSatisfy { !$0.isEnabled || $0.adjustments.isDefault }
     }
 
     /// True only for untouched settings (`EditSettings()`): no masks (not even hidden / empty

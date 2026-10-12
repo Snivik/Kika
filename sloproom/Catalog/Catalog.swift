@@ -25,6 +25,8 @@ nonisolated enum CatalogChange: Sendable, Equatable {
     case folderMembership(Set<Int64>)
     case roots
     case cropPresets
+    /// Decode profiles or their global / camera defaults (Develop/Decode). The registry is reloaded.
+    case decodeProfiles
 }
 
 nonisolated final class Catalog: @unchecked Sendable {
