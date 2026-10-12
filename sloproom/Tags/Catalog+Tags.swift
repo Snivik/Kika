@@ -12,7 +12,22 @@
 
 import Foundation
 
+nonisolated enum TagError: LocalizedError {
+    case notFor(tag: String, items: String)
+    var errorDescription: String? {
+        switch self {
+        case .notFor(let tag, let items): "The tag “\(tag)” isn't used for \(items). Edit the tag to allow it."
+        }
+    }
+}
+
 nonisolated extension Catalog {
+    /// Throws unless the tag exists and applies to photos (`column` "photos") / folders ("folders").
+    private func requireTag(_ id: Int64, appliesTo column: String) throws {
+        let row = try db.queryFirst("SELECT name, \(column) FROM tags WHERE id = ?", [id]) { ($0.string(0), $0.bool(1)) }
+        guard let row, row.1 else { throw TagError.notFor(tag: row?.0 ?? "#\(id)", items: column) }
+    }
+
     /// Creates the tables (once per catalog). Cheap; idempotent.
     func ensureTags() throws {
         try applyMigration(named: "tags.v1", sql: """
@@ -123,6 +138,7 @@ nonisolated extension Catalog {
     func setPhotoTag(_ tagID: Int64, value: String?, author: String = TagAuthor.user, for photoIDs: some Collection<Int64>) throws {
         guard !photoIDs.isEmpty else { return }
         try ensureTags()
+        if value != nil { try requireTag(tagID, appliesTo: "photos") }
         let now = Date()
         try db.transaction {
             for id in photoIDs {
@@ -179,6 +195,7 @@ nonisolated extension Catalog {
     func setFolderTag(_ tagID: Int64, value: String?, author: String = TagAuthor.user, for folderIDs: some Collection<Int64>) throws {
         guard !folderIDs.isEmpty else { return }
         try ensureTags()
+        if value != nil { try requireTag(tagID, appliesTo: "folders") }
         let now = Date()
         try db.transaction {
             for id in folderIDs {

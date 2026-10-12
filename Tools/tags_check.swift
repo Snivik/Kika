@@ -4,7 +4,7 @@
 //  value-list edits, folder tags, cascades.
 //
 //  Build & run:
-//    Tools/harness.sh /private/tmp/claude-501/tags-out/tags_check Tools/tags_check.swift
+//    Tools/harness.sh /private/tmp/claude-501/tags-out/tags_check Tools/tags_check.swift sloproom/App/FolderTree.swift
 //    /private/tmp/claude-501/tags-out/tags_check [out-dir]
 //
 //  Writes only a temp catalog in out-dir. No sample photos needed (runs in CI).
@@ -108,11 +108,41 @@ struct TagsCheck {
         check(try catalog.allTags().first { $0.id == client }?.values == ["Ben", "Cara"], "new values saved")
 
         print("Folders")
+        check((try? catalog.setFolderTag(blurry, value: "true", for: [folder])) == nil, "a photo-only tag can't be set on folders")
         try catalog.setFolderTag(client, value: "Ben", for: [folder])
         check(try catalog.folderTagValues()[folder]?[client]?.effective?.value == "Ben", "folder value")
         c.appliesToFolders = false
         try catalog.updateTag(c)
         check(try catalog.folderTagValues().isEmpty, "tag no longer for folders: folder values removed")
+
+        print("Folder filter (sidebar)")
+        let trips = try catalog.createFolder(name: "Trips")
+        let italy = try catalog.createFolder(name: "Italy", parentID: trips)
+        let rome = try catalog.createFolder(name: "Rome", parentID: italy)
+        let japan = try catalog.createFolder(name: "Japan", parentID: trips)
+        c.appliesToFolders = true
+        try catalog.updateTag(c)
+        try catalog.setFolderTag(client, value: "Cara", for: [rome])
+        try catalog.setFolderTag(client, value: "Ben", author: "workflow:guess", for: [japan])
+        let fvalues = try catalog.folderTagValues()
+        let tree = FolderTree.build(try catalog.allFolders())
+        func filter(_ m: TagMatch?, text: String = "") -> (ids: [Int64], matching: Set<Int64>) {
+            let r = FolderTree.filtered(tree) { f in
+                (text.isEmpty || f.name.localizedCaseInsensitiveContains(text)) && (m.map { (fvalues[f.id]?[client]).satisfies($0) } ?? true)
+            }
+            func flat(_ n: [FolderNode]) -> [Int64] { n.flatMap { [$0.id] + flat($0.children) } }
+            return (flat(r.nodes), r.matching)
+        }
+        var r = filter(.value("Cara"))
+        check(r.ids == [trips, italy, rome] && r.matching == [rome], "match keeps its ancestors; only the match counts as matching")
+        r = filter(.value("Ben"))
+        check(r.ids == [trips, japan], "workflow value is the effective value")
+        r = filter(.toReview(nil))
+        check(r.matching == [japan], "To Review on folders")
+        r = filter(nil, text: "ITA")
+        check(r.ids == [trips, italy] && r.matching == [italy], "name filter, case-insensitive; children of a match aren't shown unless they match")
+        r = filter(.value("Cara"), text: "x")
+        check(r.ids.isEmpty, "both must match")
 
         print("Cascades")
         try catalog.removePhotos(ids: [ids[3]])

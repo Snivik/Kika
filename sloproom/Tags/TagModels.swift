@@ -77,3 +77,17 @@ nonisolated struct TagCondition: Hashable, Sendable {
     var tagID: Int64
     var match: TagMatch
 }
+
+nonisolated extension TagValues {
+    /// In-memory twin of `Catalog.tagSQL` (folders are filtered in the sidebar, not in SQL).
+    func satisfies(_ match: TagMatch) -> Bool {
+        switch match {
+        case .value(let v): effective?.value == v
+        case .toReview(let v): needsReview && (v == nil || suggested?.value == v)
+        }
+    }
+}
+
+nonisolated extension Optional where Wrapped == TagValues {
+    func satisfies(_ match: TagMatch) -> Bool { self?.satisfies(match) ?? false }
+}

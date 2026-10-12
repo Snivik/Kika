@@ -35,6 +35,10 @@ final class FolderSidebarState {
     var pendingDeletion: PendingFolderDeletion?
     /// A just-created folder the sidebar should scroll to once it appears in `model.folders`.
     var scrollTarget: Int64?
+    /// Folder filter (bar at the bottom of the sidebar): name substring and tag conditions, all must match.
+    var filterText = ""
+    var filterTags: [TagCondition] = []
+    var isFiltering: Bool { !filterText.trimmingCharacters(in: .whitespaces).isEmpty || !filterTags.isEmpty }
 
     private init() {
         let stored = UserDefaults.standard.array(forKey: Self.expandedKey) as? [Int] ?? []

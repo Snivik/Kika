@@ -8,6 +8,7 @@
 //    tag folder <name> <value|none> <folder name>
 //    tag sidebar <name> <value|review>     select the sidebar row
 //    tag filter <name> <value|review|none> add / remove a filter condition (filter bar)
+//    tag folderfilter <name> <value|review|none> | tag foldertext [text]   the sidebar's folder filter
 //    tag confirm                           confirm suggestions on the action targets
 //    tag edit <name> | tag editnew | tag close   open / close the editor sheet
 //    tag dump                              tags, counts, filter, shown photos
@@ -46,6 +47,12 @@ enum TagsDevScript {
             guard let t = tag(p[1]) else { return }
             model.filter.tags.removeAll { $0.tagID == t.id }
             if p[2] != "none" { model.filter.tags.append(TagCondition(tagID: t.id, match: match(p[2]))) }
+        case "folderfilter" where p.count >= 3:   // tag folderfilter <name> <value|review|none>
+            guard let t = tag(p[1]) else { return }
+            FolderSidebarState.shared.filterTags.removeAll { $0.tagID == t.id }
+            if p[2] != "none" { FolderSidebarState.shared.filterTags.append(TagCondition(tagID: t.id, match: match(p[2]))) }
+        case "foldertext":                         // tag foldertext [text]
+            FolderSidebarState.shared.filterText = p.dropFirst().joined(separator: " ")
         case "confirm":
             TagActions.confirmSuggested(model.actionTargetIDs, model: model)
         case "edit" where p.count >= 2:

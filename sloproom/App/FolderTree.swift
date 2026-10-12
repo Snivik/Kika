@@ -32,6 +32,21 @@ nonisolated enum FolderTree {
         return nodes(nil)
     }
 
+    /// The tree pruned to folders that match and their ancestors (so matches keep their place), plus the ids
+    /// that match themselves (the sidebar dims the ancestors that are only there for context).
+    static func filtered(_ roots: [FolderNode], matches: (Folder) -> Bool) -> (nodes: [FolderNode], matching: Set<Int64>) {
+        var matching = Set<Int64>()
+        func prune(_ nodes: [FolderNode]) -> [FolderNode] {
+            nodes.compactMap { node in
+                let children = prune(node.children)
+                let isMatch = matches(node.folder)
+                if isMatch { matching.insert(node.id) }
+                return isMatch || !children.isEmpty ? FolderNode(folder: node.folder, children: children) : nil
+            }
+        }
+        return (prune(roots), matching)
+    }
+
     /// Ids of `id` and all descendants within `folders`.
     static func subtreeIDs(of id: Int64, in folders: [Folder]) -> Set<Int64> {
         let byParent = Dictionary(grouping: folders) { $0.parentID }

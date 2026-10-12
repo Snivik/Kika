@@ -56,9 +56,9 @@ final class TagStore {
     }
 
     /// Tags whose effective value lights a dot, in tag order (grid cells, filmstrip, folder rows).
-    func dots(_ values: [Int64: TagValues]?) -> [(tag: Tag, value: TagValue, isMine: Bool)] {
+    func dots(_ values: [Int64: TagValues]?, forFolders: Bool = false) -> [(tag: Tag, value: TagValue, isMine: Bool)] {
         guard let values, !values.isEmpty else { return [] }
-        return tags.compactMap { tag in
+        return (forFolders ? folderTags : photoTags).compactMap { tag in
             guard let v = values[tag.id], let e = v.effective, Tag.isShown(e.value) else { return nil }
             return (tag, e, v.mine != nil)
         }

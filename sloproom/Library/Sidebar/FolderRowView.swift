@@ -13,18 +13,22 @@ import UniformTypeIdentifiers
 struct FolderOutline: View {
     let nodes: [FolderNode]
     let counts: SidebarCounts
+    /// While the folder filter is on: the folders that match (others are shown dimmed, as context for a match
+    /// below them) and every group is expanded. nil = no filter.
+    var matching: Set<Int64>? = nil
 
     var body: some View {
         ForEach(nodes) { node in
+            let dimmed = matching.map { !$0.contains(node.id) } ?? false
             if node.children.isEmpty {
-                FolderRowView(node: node, counts: counts)
+                FolderRowView(node: node, counts: counts, isDimmed: dimmed)
                     .tag(SidebarItem.folder(node.id))
                     .id(SidebarItem.folder(node.id))
             } else {
-                DisclosureGroup(isExpanded: FolderSidebarState.shared.expansionBinding(node.id)) {
-                    FolderOutline(nodes: node.children, counts: counts)
+                DisclosureGroup(isExpanded: matching == nil ? FolderSidebarState.shared.expansionBinding(node.id) : .constant(true)) {
+                    FolderOutline(nodes: node.children, counts: counts, matching: matching)
                 } label: {
-                    FolderRowView(node: node, counts: counts)
+                    FolderRowView(node: node, counts: counts, isDimmed: dimmed)
                         .tag(SidebarItem.folder(node.id))
                         .id(SidebarItem.folder(node.id))
                 }
@@ -37,6 +41,8 @@ struct FolderRowView: View {
     @Environment(AppModel.self) private var model
     let node: FolderNode
     let counts: SidebarCounts
+    /// Shown only as the parent of a filter match.
+    var isDimmed = false
 
     @State private var draftName = ""
     @FocusState private var isFieldFocused: Bool
@@ -55,8 +61,10 @@ struct FolderRowView: View {
             } else {
                 HStack(spacing: 5) {
                     Text(node.folder.name).lineLimit(1)
-                    TagDots(values: TagStore.shared.folderValues[node.id], size: 7)   // Tags/UI/TagViews.swift
+                    // Finder-style overlapping tag circles after the name (Tags/UI/TagViews.swift).
+                    TagDots(values: TagStore.shared.folderValues[node.id], size: 9, overlapping: true, forFolders: true)
                 }
+                .opacity(isDimmed ? 0.5 : 1)   // the sidebar list overrides foregroundStyle on labels
             }
         } icon: {
             Image(systemName: node.children.isEmpty ? "folder" : "folder.fill")

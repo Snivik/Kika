@@ -8,6 +8,7 @@
 //  workflow and not reviewed yet.
 //
 
+import AppKit
 import SwiftUI
 
 extension TagColor {
@@ -48,14 +49,20 @@ struct TagDot: View {
 struct TagDots: View {
     let values: [Int64: TagValues]?
     var size: CGFloat = 8
+    /// Finder's style for tags in a list: circles overlapping by a third, each with a thin outline.
+    var overlapping = false
+    var forFolders = false
     private var store: TagStore { .shared }
 
     var body: some View {
-        let dots = store.dots(values)
+        let dots = store.dots(values, forFolders: forFolders)
         if !dots.isEmpty {
-            HStack(spacing: 2) {
+            HStack(spacing: overlapping ? -size / 3 : 2) {
                 ForEach(dots, id: \.tag.id) { d in
                     TagDot(color: d.tag.color, filled: d.isMine, size: size)
+                        .background {
+                            if overlapping { Circle().fill(Color(nsColor: .windowBackgroundColor)).padding(-1) }
+                        }
                 }
             }
             .help(dots.map { d in

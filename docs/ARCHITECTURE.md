@@ -631,7 +631,12 @@ sRGB primaries**, extent `(0,0,W,H)`):
   To Review = `SidebarItem.tag`, All Photographs + that one condition), Tags submenus (photo context menus,
   Photo menu, folder context menu), dots on grid / filmstrip / folder rows (filled = yours, ring = suggested),
   Develop › Tags panel (your value, the suggestion + Confirm). `TagStore` mirrors all values (whole catalog).
-- Changing a tag's values or scope deletes stored values that no longer fit (the editor warns with counts).
+- Changing a tag's values or scope deletes stored values that no longer fit (the editor warns with counts);
+  setting a value of a tag that doesn't apply to photos / folders throws `TagError`.
+- Folder rows show Finder-style overlapping circles after the name. The sidebar's bottom filter bar
+  (`Library/Sidebar/FolderFilterBar.swift`, state in `FolderSidebarState`) filters folders by name and folder tags
+  in memory (`TagValues.satisfies`, the twin of `tagSQL`) via `FolderTree.filtered`: matches plus their ancestors
+  (dimmed), all expanded.
 
 ## Decode profiles (`Develop/Decode/`, harness `Tools/decode_check.swift`)
 

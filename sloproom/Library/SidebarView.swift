@@ -14,7 +14,8 @@
 //    onto the "Folders" header to move it to the top level. Drag photos from the grid onto a
 //    folder to add them (hold ⌘ to move them out of the shown folder, ⌥ to drop virtual copies;
 //    `PhotoDropVerb`).
-//  Rows: see `FolderRowView.swift`; actions: `FolderActions.swift`.
+//  Rows: see `FolderRowView.swift`; actions: `FolderActions.swift`; the bottom filter bar (name + folder
+//  tags; matches keep their parents, dimmed): `FolderFilterBar.swift`.
 //
 
 import AppKit
@@ -43,13 +44,18 @@ struct SidebarView: View {
                         .tag(SidebarItem.rejected)
                 }
                 Section {
-                    FolderOutline(nodes: model.folderTree, counts: counts)
+                    let visible = state.visibleTree(model.folderTree)   // FolderFilterBar.swift
+                    FolderOutline(nodes: visible.nodes, counts: counts, matching: visible.matching)
+                    if visible.matching?.isEmpty == true {
+                        Text("No Matching Folders").foregroundStyle(.secondary)
+                    }
                 } header: {
                     FoldersSectionHeader()
                 }
                 TagsSidebarSection()   // Tags/UI/TagsSidebarSection.swift
             }
             .listStyle(.sidebar)
+            .safeAreaInset(edge: .bottom, spacing: 0) { FolderFilterBar() }   // name + tag filter for folders
             .contextMenu(forSelectionType: SidebarItem.self) { items in
                 contextMenu(for: items)
             } primaryAction: { items in

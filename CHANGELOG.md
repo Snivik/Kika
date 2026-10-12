@@ -16,6 +16,8 @@ Newest first; written for people, not commits.
   filled when you set the value, a ring when it's a suggestion.
 - Set tags from the right-click menu, the Photo menu or the new Tags panel in Develop, where you can also confirm
   suggestions one photo at a time.
+- Folders show their tags as small circles after the name, like Finder. The filter bar at the bottom of the
+  sidebar narrows the folder list by name or tag, keeping each match's parent folders for context.
 
 **Filtering**
 - One Filter menu for flags, star ratings and tags, in Library and in Develop's filmstrip. Active filters show

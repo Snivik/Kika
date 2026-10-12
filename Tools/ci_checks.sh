@@ -48,7 +48,7 @@ HARNESS_NO_DEFAULT=1 check shortcuts_check "" \
 check decode_check "$OUT/no-raw.RW2 $OUT/decode-run" \
   $APP/Actions/EditSections.swift
 
-check tags_check "$OUT/tags-run"
+check tags_check "$OUT/tags-run" $APP/App/FolderTree.swift
 
 if [ ${#FAILED[@]} -gt 0 ]; then
   echo "FAILED: ${FAILED[*]}"
