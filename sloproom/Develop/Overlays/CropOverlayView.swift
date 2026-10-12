@@ -43,6 +43,7 @@ struct CropOverlayView: View {
                     if case .active(let p) = phase { hover = Self.handle(at: p, crop: crop) } else { hover = nil }
                 }
                 .pointerStyle(pointerStyle(drag?.handle ?? hover))
+                .resetsPointerWhenRemoved()
         } else {
             // The uncropped render hasn't arrived yet (or is stale after a turn).
             Color.clear.allowsHitTesting(false)
@@ -132,7 +133,8 @@ struct CropOverlayView: View {
         case .bottomLeft: .frameResize(position: .bottomLeading)
         case .left: .frameResize(position: .leading)
         case .inside: drag == nil ? .grabIdle : .grabActive
-        case .outside, nil: nil
+        case .outside: .rotate
+        case nil: nil
         }
     }
 

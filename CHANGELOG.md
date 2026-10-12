@@ -9,6 +9,8 @@ Versions go up one minor per release (0.1.0, 0.2.0, …). Newest first; written 
 **Fixes**
 - Opening an empty folder no longer crashes the app.
 - After you drag photos onto a folder, the "Add" badge on the folder now goes away.
+- After you leave Develop while zoomed in, the Library goes back to the normal pointer instead of the zoom or hand cursor.
+- In Crop, the pointer outside the crop rectangle now shows a rotate arrow, since dragging there straightens the photo.
 
 ## 0.1.0 — 2026-10-12
 

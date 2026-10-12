@@ -17,7 +17,7 @@ struct WhiteBalancePickerOverlay: View {
     var body: some View {
         Color.clear
             .contentShape(Rectangle())
-            .onHover { inside in if inside { NSCursor.crosshair.push() } else { NSCursor.pop() } }
+            .pointerStyle(.rectSelection)   // crosshair
             .onTapGesture { location in
                 session.isPickingWhiteBalance = false
                 guard imageRect.contains(location) else { return }
@@ -29,7 +29,7 @@ struct WhiteBalancePickerOverlay: View {
             .shortcutHandlers(id: ObjectIdentifier(session)) { [weak session] in
                 [ShortcutHandler(.cancelWhiteBalance) { _ in session?.isPickingWhiteBalance = false }]
             }
-            .onDisappear { NSCursor.arrow.set() }
+            .resetsPointerWhenRemoved()
     }
 }
 

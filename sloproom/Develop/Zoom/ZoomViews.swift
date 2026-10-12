@@ -72,6 +72,7 @@ struct HandToolLayer: View {
                     }
             )
             .pointerStyle(zoom.isPanning ? .grabActive : zoom.isZoomed ? .grabIdle : (clickToZoom ? .zoomIn : nil))
+            .resetsPointerWhenRemoved()   // e.g. leaving Develop while zoomed (CanvasPointer.swift)
     }
 }
 

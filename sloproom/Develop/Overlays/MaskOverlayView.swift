@@ -40,6 +40,7 @@ struct MaskOverlayView: View {
         }
         .contentShape(Rectangle())
         .pointerStyle(isBrushing || tool.pendingKind != nil ? .rectSelection : nil)
+        .resetsPointerWhenRemoved()
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .local)
                 .onChanged { value in
