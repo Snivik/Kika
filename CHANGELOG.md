@@ -30,8 +30,6 @@ Newest first; written for people, not commits.
 - Filter any tag by "Untagged" to find photos or folders nobody has tagged yet, e.g. ones a workflow hasn't
   looked at.
 
-## 0.1.1 — 2026-10-12
-
 **Fixes**
 - Opening an empty folder no longer crashes the app.
 - After you drag photos onto a folder, the "Add" badge on the folder now goes away.
