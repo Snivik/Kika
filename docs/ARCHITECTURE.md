@@ -616,6 +616,14 @@ sRGB primaries**, extent `(0,0,W,H)`):
   field, ⌥-drag fine adjust, double-click title/track to reset. Existing call sites are unchanged.
 - Harness: `Tools/develop_check.swift` (renders every control, invariants, scale consistency, timing).
 
+## Sidebar sections
+
+Library, Folders, Dates, Tags; each `Section(isExpanded:)` (Hide / Show on header hover), remembered in
+`sidebar.section.*` defaults. Dates (`Library/Sidebar/SidebarDates.swift`): capture year › month rows with counts
+(`Catalog.captureMonthCounts`, Calendar.current, refreshed with `SidebarCounts`) + "Unknown Date";
+`SidebarItem.date(year:month:)` / `.undated` → `PhotoSource.captureDate(year:month:)` / `.undated`
+([start, end) from `PhotoSource.captureRange`). Expanded years: `sidebar.expandedYears`.
+
 ## Tags (`Tags/`, harness `Tools/tags_check.swift`)
 
 - A tag = name (unique, case-insensitive), colour (`TagColor`), allowed values (default `true, false`), and
@@ -633,8 +641,9 @@ sRGB primaries**, extent `(0,0,W,H)`):
   Develop › Tags panel (your value, the suggestion + Confirm). `TagStore` mirrors all values (whole catalog).
 - Changing a tag's values or scope deletes stored values that no longer fit (the editor warns with counts);
   setting a value of a tag that doesn't apply to photos / folders throws `TagError`.
-- Folder rows show Finder-style overlapping circles after the name. The sidebar's bottom filter bar
-  (`Library/Sidebar/FolderFilterBar.swift`, state in `FolderSidebarState`) filters folders by name and folder tags
+- Folder rows show Finder-style overlapping circles after the name. The folder filter (name field = first row of
+  the Folders section, tag menu in the Folders header; `Library/Sidebar/FolderFilterBar.swift`, state in
+  `FolderSidebarState`; menus don't render inside sidebar List rows) filters folders by name and folder tags
   in memory (`TagValues.satisfies`, the twin of `tagSQL`) via `FolderTree.filtered`: matches plus their ancestors
   (dimmed), all expanded.
 

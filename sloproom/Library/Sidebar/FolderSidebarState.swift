@@ -75,6 +75,9 @@ final class FolderSidebarState {
 @Observable
 final class SidebarCounts {
     private(set) var flags = FlagCounts()
+    /// Photos per capture month, newest first, and without a capture date (Dates section).
+    private(set) var months: [CaptureMonthCount] = []
+    private(set) var undated = 0
     /// Distinct photos per folder including descendants (absent = 0).
     private(set) var folderTotals: [Int64: Int] = [:]
 
@@ -102,13 +105,16 @@ final class SidebarCounts {
         Task.detached(priority: .userInitiated) { [weak self] in
             let flags = (try? catalog.flagCounts()) ?? FlagCounts()
             let totals = (try? catalog.folderTotalPhotoCounts()) ?? [:]
-            await self?.finishRefresh(flags: flags, totals: totals)
+            let dates = (try? catalog.captureMonthCounts()) ?? ([], 0)
+            await self?.finishRefresh(flags: flags, totals: totals, dates: dates)
         }
     }
 
-    private func finishRefresh(flags: FlagCounts, totals: [Int64: Int]) {
+    private func finishRefresh(flags: FlagCounts, totals: [Int64: Int], dates: (months: [CaptureMonthCount], undated: Int)) {
         if self.flags != flags { self.flags = flags }
         if folderTotals != totals { folderTotals = totals }
+        if months != dates.months { months = dates.months }
+        if undated != dates.undated { undated = dates.undated }
         isRefreshing = false
         if needsRefresh { needsRefresh = false; refresh() }
     }

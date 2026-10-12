@@ -143,6 +143,24 @@ nonisolated enum PhotoSource: Hashable, Sendable {
     /// Photos whose `import_date` equals the newest `import_date` in the catalog.
     /// Importers: use ONE `importDate` value for every photo of an import session.
     case lastImport
+    /// Photos captured in a year, or one month of it (1…12), in the Mac's time zone (sidebar Dates).
+    case captureDate(year: Int, month: Int?)
+    /// Photos without a capture date.
+    case undated
+
+    /// [start, end) of a `captureDate` source in the current calendar.
+    static func captureRange(year: Int, month: Int?, calendar: Calendar = .current) -> (start: Date, end: Date)? {
+        guard let start = calendar.date(from: DateComponents(year: year, month: month ?? 1, day: 1)),
+              let end = calendar.date(byAdding: month == nil ? .year : .month, value: 1, to: start) else { return nil }
+        return (start, end)
+    }
+}
+
+/// Photos per capture month (sidebar Dates).
+nonisolated struct CaptureMonthCount: Hashable, Sendable {
+    var year: Int
+    var month: Int
+    var count: Int
 }
 
 nonisolated enum FlagFilter: String, Hashable, Sendable, CaseIterable {

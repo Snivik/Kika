@@ -188,7 +188,7 @@ Build from the repo root (engine default set + the extra files listed), run, exp
 | `foundation_check` | – | `[photo-dir] [out-dir]` |
 | `lrimport_check` | `sloproom/LightroomImport/{LightroomCatalogReader,LightroomImportPlan,Catalog+LightroomImport,RootAccess}.swift sloproom/App/FolderTree.swift` | `<catalog.lrcat> [out-dir]` (a COPY of the owner's catalog) |
 | `sdimport_check` | `sloproom/Import/ImportEngine.swift sloproom/Import/Catalog+Import.swift` | `[sample-dir] [out-dir]` |
-| `folders_check` | `sloproom/App/FolderTree.swift sloproom/Library/Sidebar/{Catalog+FolderManagement,FolderDragPayload}.swift` | `[out-dir]` |
+| `folders_check` | `sloproom/App/FolderTree.swift sloproom/Library/Sidebar/{Catalog+FolderManagement,FolderDragPayload}.swift` | `[out-dir]` (folder tree, moves, cycles, …; Dates: capture month counts, year / month / undated sources) |
 | `previews_check` | – | `[photo-dir] [out-dir]` |
 | `develop_check` | – | `[dng] [out-dir] [only-name-substring]` |
 | `masks_check` | `sloproom/Develop/DevelopSession.swift sloproom/Develop/Masking/UI/{MaskInteraction,MaskToolState,DevelopSession+Masks}.swift sloproom/Develop/Crop/{DevelopSession+Crop,CropMath,Catalog+CropPresets}.swift` | `[dng] [out-dir]` |

@@ -2,8 +2,9 @@
 //  SidebarView.swift
 //  sloproom
 //
-//  Library sources (All / Previous Import / Picked / Rejected), the nested folder tree, and Tags
-//  (Tags/UI/TagsSidebarSection.swift: each tag's values + To Review).
+//  Sections (each can be hidden from its header, remembered): Library sources (All / Previous Import /
+//  Picked / Rejected), Folders (filter row on top, then the nested tree), Dates (capture year › month,
+//  Sidebar/SidebarDates.swift) and Tags (Tags/UI/TagsSidebarSection.swift: each tag's values + To Review).
 //
 //  Folder management:
 //  - "+" in the Folders header, ⇧⌘N, or the context menu ("Create Subfolder" on a folder,
@@ -14,7 +15,7 @@
 //    onto the "Folders" header to move it to the top level. Drag photos from the grid onto a
 //    folder to add them (hold ⌘ to move them out of the shown folder, ⌥ to drop virtual copies;
 //    `PhotoDropVerb`).
-//  Rows: see `FolderRowView.swift`; actions: `FolderActions.swift`; the bottom filter bar (name + folder
+//  Rows: see `FolderRowView.swift`; actions: `FolderActions.swift`; the folder filter row (name + folder
 //  tags; matches keep their parents, dimmed): `FolderFilterBar.swift`.
 //
 
@@ -24,38 +25,25 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @State private var counts = SidebarCounts()
+    // Sections can be hidden (the header's Hide / Show on hover, like Finder); remembered.
+    @AppStorage("sidebar.section.library") private var showsLibrary = true
+    @AppStorage("sidebar.section.folders") private var showsFolders = true
+    @AppStorage("sidebar.section.dates") private var showsDates = true
+    @AppStorage("sidebar.section.tags") private var showsTags = true
     private var state: FolderSidebarState { .shared }
 
     var body: some View {
         @Bindable var state = state
         ScrollViewReader { proxy in
             List(selection: selectionBinding) {
-                Section("Library") {
-                    Label("All Photographs", systemImage: "photo.on.rectangle")
-                        .badge(model.totalPhotoCount)
-                        .tag(SidebarItem.all)
-                    Label("Previous Import", systemImage: "clock.arrow.circlepath")
-                        .tag(SidebarItem.lastImport)
-                    Label("Picked", systemImage: "flag.fill")
-                        .badge(counts.flags.picked)
-                        .tag(SidebarItem.picked)
-                    Label("Rejected", systemImage: "flag.slash")
-                        .badge(counts.flags.rejected)
-                        .tag(SidebarItem.rejected)
+                librarySection
+                foldersSection
+                Section("Dates", isExpanded: $showsDates) {
+                    SidebarDates(counts: counts)   // Sidebar/SidebarDates.swift
                 }
-                Section {
-                    let visible = state.visibleTree(model.folderTree)   // FolderFilterBar.swift
-                    FolderOutline(nodes: visible.nodes, counts: counts, matching: visible.matching)
-                    if visible.matching?.isEmpty == true {
-                        Text("No Matching Folders").foregroundStyle(.secondary)
-                    }
-                } header: {
-                    FoldersSectionHeader()
-                }
-                TagsSidebarSection()   // Tags/UI/TagsSidebarSection.swift
+                TagsSidebarSection(isExpanded: $showsTags)   // Tags/UI/TagsSidebarSection.swift
             }
             .listStyle(.sidebar)
-            .safeAreaInset(edge: .bottom, spacing: 0) { FolderFilterBar() }   // name + tag filter for folders
             .contextMenu(forSelectionType: SidebarItem.self) { items in
                 contextMenu(for: items)
             } primaryAction: { items in
@@ -89,6 +77,35 @@ struct SidebarView: View {
                     DispatchQueue.main.async { withAnimation { proxy.scrollTo(SidebarItem.folder(target), anchor: .center) } }
                 }
             }
+        }
+    }
+
+    private var librarySection: some View {
+        Section("Library", isExpanded: $showsLibrary) {
+            Label("All Photographs", systemImage: "photo.on.rectangle")
+                .badge(model.totalPhotoCount)
+                .tag(SidebarItem.all)
+            Label("Previous Import", systemImage: "clock.arrow.circlepath")
+                .tag(SidebarItem.lastImport)
+            Label("Picked", systemImage: "flag.fill")
+                .badge(counts.flags.picked)
+                .tag(SidebarItem.picked)
+            Label("Rejected", systemImage: "flag.slash")
+                .badge(counts.flags.rejected)
+                .tag(SidebarItem.rejected)
+        }
+    }
+
+    private var foldersSection: some View {
+        Section(isExpanded: $showsFolders) {
+            FolderFilterBar()   // name + tag filter for the folder list
+            let visible = state.visibleTree(model.folderTree)   // FolderFilterBar.swift
+            FolderOutline(nodes: visible.nodes, counts: counts, matching: visible.matching)
+            if visible.matching?.isEmpty == true {
+                Text("No Matching Folders").foregroundStyle(.secondary)
+            }
+        } header: {
+            FoldersSectionHeader()
         }
     }
 

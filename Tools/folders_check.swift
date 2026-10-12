@@ -185,6 +185,24 @@ struct FoldersCheck {
         _ = try time("FolderTree.build") { FolderTree.build(try big.allFolders()) }
         try time("move 5000 photos between folders") { try big.movePhotos(bigIDs[0..<5000], fromFolders: [folderIDs[0]], to: folderIDs[50]) }
 
+        // MARK: Dates section (capture year / month sources)
+        print("Dates")
+        let cal = Calendar.current
+        let firstDate = Date(timeIntervalSince1970: 1_700_000_000)
+        let ym = cal.dateComponents([.year, .month], from: firstDate)
+        let (y, m) = (ym.year!, ym.month!)
+        let undatedID = try catalog.insertPhotos([Photo(path: "/test/NO_DATE.DNG")])[0]
+        let dates = try catalog.captureMonthCounts()
+        check(dates.months == [CaptureMonthCount(year: y, month: m, count: ids.count)], "month counts: \(dates.months)")
+        check(dates.undated == 1, "undated count")
+        check(try catalog.photos(in: .captureDate(year: y, month: m)).count == ids.count, "month source")
+        check(try catalog.photos(in: .captureDate(year: y, month: nil)).count == ids.count, "year source")
+        check(try catalog.photos(in: .captureDate(year: y + 1, month: nil)).isEmpty, "other year empty")
+        check(try catalog.photos(in: .captureDate(year: y, month: m == 12 ? 1 : m + 1)).isEmpty, "other month empty")
+        check(try catalog.photos(in: .undated).map(\.id) == [undatedID], "undated source")
+        let edge = PhotoSource.captureRange(year: 2024, month: 12)!
+        check(cal.component(.month, from: edge.end) == 1 && cal.component(.year, from: edge.end) == 2025, "December range ends in January")
+
         print(failures == 0 ? "ALL PASSED" : "\(failures) FAILURE(S)")
         if failures > 0 { exit(1) }
     }

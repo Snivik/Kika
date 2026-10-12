@@ -146,6 +146,7 @@ struct FoldersSectionHeader: View {
         HStack {
             Text("Folders")
             Spacer()
+            FolderTagFilterMenu()   // FolderFilterBar.swift
             Button {
                 FolderActions.newFolder(parentID: nil, model: model)
             } label: {

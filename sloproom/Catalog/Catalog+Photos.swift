@@ -81,6 +81,20 @@ nonisolated extension Catalog {
         Int(try db.scalarInt("SELECT COUNT(*) FROM photos") ?? 0)
     }
 
+    /// Photos per capture month in the current calendar, newest first, and how many have no capture date.
+    func captureMonthCounts(calendar: Calendar = .current) throws -> (months: [CaptureMonthCount], undated: Int) {
+        var byMonth: [Int: Int] = [:]   // year * 100 + month
+        var undated = 0
+        try db.query("SELECT capture_date FROM photos") { r in
+            guard let date = r.date(0) else { undated += 1; return }
+            let c = calendar.dateComponents([.year, .month], from: date)
+            byMonth[(c.year ?? 0) * 100 + (c.month ?? 0), default: 0] += 1
+        }
+        let months = byMonth.map { CaptureMonthCount(year: $0.key / 100, month: $0.key % 100, count: $0.value) }
+            .sorted { ($0.year, $0.month) > ($1.year, $1.month) }
+        return (months, undated)
+    }
+
     /// The main photo query used by the library grid.
     func photos(in source: PhotoSource, filter: PhotoFilter = PhotoFilter(), sort: PhotoSort = PhotoSort()) throws -> [Photo] {
         var args: [any SQLBindable] = []
@@ -93,6 +107,14 @@ nonisolated extension Catalog {
         case .lastImport:
             sql = "SELECT \(Self.photoColumns), 0 AS fo FROM photos p"
             conditions.append("p.import_date = (SELECT MAX(import_date) FROM photos)")
+        case .captureDate(let year, let month):
+            sql = "SELECT \(Self.photoColumns), 0 AS fo FROM photos p"
+            let range = PhotoSource.captureRange(year: year, month: month)
+            conditions.append("p.capture_date >= ? AND p.capture_date < ?")
+            args += [range?.start ?? .distantFuture, range?.end ?? .distantFuture]
+        case .undated:
+            sql = "SELECT \(Self.photoColumns), 0 AS fo FROM photos p"
+            conditions.append("p.capture_date IS NULL")
         case .folder(let id, false):
             sql = """
                 SELECT \(Self.photoColumns), fp.sort_order AS fo FROM photos p

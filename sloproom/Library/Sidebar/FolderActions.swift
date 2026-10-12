@@ -17,6 +17,9 @@ enum SidebarItem: Hashable {
     case rejected
     case folder(Int64)
     case tag(Int64, TagMatch)
+    /// Dates section: a year (month nil) or one month; photos without a capture date.
+    case date(year: Int, month: Int?)
+    case undated
 
     /// A row that is All Photographs + a filter; leaving it clears that filter.
     var isSmartSource: Bool {
@@ -45,6 +48,8 @@ extension AppModel {
             }
         case .lastImport: .lastImport
         case .folder(let id, _): .folder(id)
+        case .captureDate(let year, let month): .date(year: year, month: month)
+        case .undated: .undated
         }
     }
 
@@ -69,6 +74,12 @@ extension AppModel {
         case .folder(let id):
             if leavingSmartSource { filter = PhotoFilter() }
             selectedSource = .folder(id: id, includeSubfolders: includeSubfolders)
+        case .date(let year, let month):
+            if leavingSmartSource { filter = PhotoFilter() }
+            selectedSource = .captureDate(year: year, month: month)
+        case .undated:
+            if leavingSmartSource { filter = PhotoFilter() }
+            selectedSource = .undated
         }
     }
 

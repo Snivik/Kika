@@ -10,12 +10,13 @@
 import SwiftUI
 
 struct TagsSidebarSection: View {
+    @Binding var isExpanded: Bool
     @Environment(AppModel.self) private var model
     @State private var collapsed: Set<Int64> = []
     private var store: TagStore { .shared }
 
     var body: some View {
-        Section {
+        Section(isExpanded: $isExpanded) {
             ForEach(store.photoTags) { tag in
                 DisclosureGroup(isExpanded: Binding(get: { !collapsed.contains(tag.id) },
                                                     set: { if $0 { collapsed.remove(tag.id) } else { collapsed.insert(tag.id) } })) {

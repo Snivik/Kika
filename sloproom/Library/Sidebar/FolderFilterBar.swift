@@ -2,8 +2,8 @@
 //  FolderFilterBar.swift
 //  sloproom
 //
-//  Filter bar at the bottom of the sidebar (like Xcode's navigators and Finder's sidebar): a tag menu and a
-//  name field. While it filters, the Folders section shows the matching folders with their parents (dimmed,
+//  Folder filter (like Xcode's navigator filter): a name field as the first row of the sidebar's Folders
+//  section, and a tag menu in the Folders header (`FolderTagFilterMenu`). While it filters, the Folders section shows the matching folders with their parents (dimmed,
 //  for context), every group expanded. Tag conditions use effective values, like the photo filter
 //  (`TagValues.satisfies`). Esc in the field clears the text.
 //
@@ -11,51 +11,56 @@
 import SwiftUI
 
 struct FolderFilterBar: View {
-    @Environment(AppModel.self) private var model
     @FocusState private var isFieldFocused: Bool
+    private var state: FolderSidebarState { .shared }
+
+    var body: some View {
+        @Bindable var state = state
+        TextField("Filter", text: $state.filterText, prompt: Text("Filter Folders"))
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.small)
+            .focused($isFieldFocused)
+            .onExitCommand { state.filterText = ""; isFieldFocused = false }
+            .help("Show folders whose name contains this text")
+            .padding(.vertical, 2)
+    }
+}
+
+/// The Folders header's tag filter (a menu doesn't render inside a sidebar List row, the header is fine).
+struct FolderTagFilterMenu: View {
+    @Environment(AppModel.self) private var model
     private var state: FolderSidebarState { .shared }
     private var store: TagStore { .shared }
 
     var body: some View {
         @Bindable var state = state
-        HStack(spacing: 6) {
-            Menu {
-                if store.folderTags.isEmpty {
-                    Text("No tags are used for folders yet")
-                }
-                ForEach(store.folderTags) { tag in
-                    Menu {
-                        ForEach(tag.values, id: \.self) { value in
-                            toggle(value, TagCondition(tagID: tag.id, match: .value(value)))
-                        }
-                        Divider()
-                        toggle("To Review", TagCondition(tagID: tag.id, match: .toReview(nil)))
-                    } label: {
-                        Label { Text(tag.name) } icon: { TagMenuIcon(color: tag.color) }
-                    }
-                }
-                Divider()
-                Button("New Tag…") { TagActions.newTag(model: model, forFolders: true) }
-                Button("Clear Filter") { state.filterText = ""; state.filterTags = [] }
-                    .disabled(!state.isFiltering)
-            } label: {
-                Image(systemName: state.filterTags.isEmpty ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+        Menu {
+            if store.folderTags.isEmpty {
+                Text("No tags are used for folders yet")
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .help(tagHelp)
-            .accessibilityLabel("Filter Folders by Tag")
-
-            TextField("Filter", text: $state.filterText, prompt: Text("Filter Folders"))
-                .textFieldStyle(.roundedBorder)
-                .controlSize(.small)
-                .focused($isFieldFocused)
-                .onExitCommand { state.filterText = ""; isFieldFocused = false }
-                .help("Show folders whose name contains this text")
+            ForEach(store.folderTags) { tag in
+                Menu {
+                    ForEach(tag.values, id: \.self) { value in
+                        toggle(value, TagCondition(tagID: tag.id, match: .value(value)))
+                    }
+                    Divider()
+                    toggle("To Review", TagCondition(tagID: tag.id, match: .toReview(nil)))
+                } label: {
+                    Label { Text(tag.name) } icon: { TagMenuIcon(color: tag.color) }
+                }
+            }
+            Divider()
+            Button("New Tag…") { TagActions.newTag(model: model, forFolders: true) }
+            Button("Clear Filter") { state.filterText = ""; state.filterTags = [] }
+                .disabled(!state.isFiltering)
+        } label: {
+            Image(systemName: state.filterTags.isEmpty ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help(tagHelp)
+        .accessibilityLabel("Filter Folders by Tag")
     }
 
     private func toggle(_ title: String, _ condition: TagCondition) -> some View {

@@ -93,6 +93,8 @@ struct MainWindowView: View {
         case .all: "All Photographs"
         case .lastImport: "Previous Import"
         case .folder(let id, _): model.folders.first { $0.id == id }?.name ?? "Folder"
+        case .captureDate(let year, let month): SidebarDates.title(year: year, month: month)
+        case .undated: "Unknown Date"
         }
     }
 }
