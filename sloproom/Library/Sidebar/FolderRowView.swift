@@ -139,16 +139,14 @@ private struct FolderDragSource: ViewModifier {
 
 /// "Folders" section header: new-folder button, and drop target for moving a folder to the top level.
 struct FoldersSectionHeader: View {
+    @Binding var isExpanded: Bool
     @Environment(AppModel.self) private var model
     @State private var isTargeted = false
 
     var body: some View {
-        HStack {
-            Text("Folders")
-            // Left, next to the title: on hover the section's Hide / Show chevron appears at the trailing edge and
-            // pushes trailing items left, which put "+" under the pointer aimed at the filter.
+        SidebarSectionHeader(title: "Folders", isExpanded: $isExpanded) {
             FolderTagFilterMenu()   // FolderFilterBar.swift
-            Spacer()
+        } actions: {
             Button {
                 FolderActions.newFolder(parentID: nil, model: model)
             } label: {
@@ -157,7 +155,6 @@ struct FoldersSectionHeader: View {
             .buttonStyle(.borderless)
             .iconHelp("New Folder", shortcut: .newFolder)
         }
-        .padding(.vertical, 2)
         .contentShape(Rectangle())
         .background {
             if isTargeted { RoundedRectangle(cornerRadius: 4).fill(Color.accentColor.opacity(0.25)).padding(-3) }

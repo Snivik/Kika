@@ -618,8 +618,9 @@ sRGB primaries**, extent `(0,0,W,H)`):
 
 ## Sidebar sections
 
-Library, Folders, Dates, Tags; each `Section(isExpanded:)` (Hide / Show on header hover), remembered in
-`sidebar.section.*` defaults. Dates (`Library/Sidebar/SidebarDates.swift`): capture year › month rows with counts
+Library, Folders, Dates, Tags: plain `Section`s with `.collapsible(false)` (no hover Hide / Show, which shifted header
+buttons and sometimes stuck) and our `SidebarSectionHeader` (always-visible chevron, accessory next to the title,
+trailing actions); rows are included only while shown. Remembered in `sidebar.section.*` defaults. Dates (`Library/Sidebar/SidebarDates.swift`): capture year › month rows with counts
 (`Catalog.captureMonthCounts`, Calendar.current, refreshed with `SidebarCounts`) + "Unknown Date";
 `SidebarItem.date(year:month:)` / `.undated` → `PhotoSource.captureDate(year:month:)` / `.undated`
 ([start, end) from `PhotoSource.captureRange`). Expanded years: `sidebar.expandedYears`.
@@ -642,8 +643,7 @@ Library, Folders, Dates, Tags; each `Section(isExpanded:)` (Hide / Show on heade
 - Changing a tag's values or scope deletes stored values that no longer fit (the editor warns with counts);
   setting a value of a tag that doesn't apply to photos / folders throws `TagError`.
 - Folder rows show Finder-style overlapping circles after the name. The folder filter (name field = first row of
-  the Folders section, tag menu in the Folders header next to the title (trailing items shift when the
-  section's Hide / Show chevron appears on hover); `Library/Sidebar/FolderFilterBar.swift`, state in
+  the Folders section, tag menu in the Folders header next to the title; `Library/Sidebar/FolderFilterBar.swift`, state in
   `FolderSidebarState`; menus don't render inside sidebar List rows) filters folders by name and folder tags
   in memory (`TagValues.satisfies`, the twin of `tagSQL`) via `FolderTree.filtered`: matches plus their ancestors
   (dimmed), all expanded.

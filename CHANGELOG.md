@@ -21,7 +21,8 @@ Newest first; written for people, not commits.
 
 **Sidebar**
 - New Dates section: every year and month you took photos in, with counts, whatever folders they're in.
-- Hide any sidebar section from its header (Library, Folders, Dates, Tags); Sloproom remembers which are hidden.
+- Hide any sidebar section with the arrow in its header (Library, Folders, Dates, Tags); Sloproom remembers which
+  are hidden.
 
 **Filtering**
 - One Filter menu for flags, star ratings and tags, in Library and in Develop's filmstrip. Active filters show

@@ -2,7 +2,7 @@
 //  SidebarView.swift
 //  sloproom
 //
-//  Sections (each can be hidden from its header, remembered): Library sources (All / Previous Import /
+//  Sections (each can be hidden with its header's chevron, remembered; Sidebar/SidebarSectionHeader.swift): Library sources (All / Previous Import /
 //  Picked / Rejected), Folders (filter row on top, then the nested tree), Dates (capture year › month,
 //  Sidebar/SidebarDates.swift) and Tags (Tags/UI/TagsSidebarSection.swift: each tag's values + To Review).
 //
@@ -25,7 +25,7 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @State private var counts = SidebarCounts()
-    // Sections can be hidden (the header's Hide / Show on hover, like Finder); remembered.
+    // Sections can be hidden with the chevron in their header (always shown, SidebarSectionHeader); remembered.
     @AppStorage("sidebar.section.library") private var showsLibrary = true
     @AppStorage("sidebar.section.folders") private var showsFolders = true
     @AppStorage("sidebar.section.dates") private var showsDates = true
@@ -38,9 +38,12 @@ struct SidebarView: View {
             List(selection: selectionBinding) {
                 librarySection
                 foldersSection
-                Section("Dates", isExpanded: $showsDates) {
-                    SidebarDates(counts: counts)   // Sidebar/SidebarDates.swift
+                Section {
+                    if showsDates { SidebarDates(counts: counts) }   // Sidebar/SidebarDates.swift
+                } header: {
+                    SidebarSectionHeader("Dates", isExpanded: $showsDates)
                 }
+                .collapsible(false)   // no hover Hide / Show: our header's chevron is always visible
                 TagsSidebarSection(isExpanded: $showsTags)   // Tags/UI/TagsSidebarSection.swift
             }
             .listStyle(.sidebar)
@@ -81,7 +84,16 @@ struct SidebarView: View {
     }
 
     private var librarySection: some View {
-        Section("Library", isExpanded: $showsLibrary) {
+        Section {
+            if showsLibrary { libraryRows }
+        } header: {
+            SidebarSectionHeader("Library", isExpanded: $showsLibrary)
+        }
+        .collapsible(false)
+    }
+
+    @ViewBuilder
+    private var libraryRows: some View {
             Label("All Photographs", systemImage: "photo.on.rectangle")
                 .badge(model.totalPhotoCount)
                 .tag(SidebarItem.all)
@@ -93,20 +105,22 @@ struct SidebarView: View {
             Label("Rejected", systemImage: "flag.slash")
                 .badge(counts.flags.rejected)
                 .tag(SidebarItem.rejected)
-        }
     }
 
     private var foldersSection: some View {
-        Section(isExpanded: $showsFolders) {
-            FolderFilterBar()   // name + tag filter for the folder list
-            let visible = state.visibleTree(model.folderTree)   // FolderFilterBar.swift
-            FolderOutline(nodes: visible.nodes, counts: counts, matching: visible.matching)
-            if visible.matching?.isEmpty == true {
-                Text("No Matching Folders").foregroundStyle(.secondary)
+        Section {
+            if showsFolders {
+                FolderFilterBar()   // name + tag filter for the folder list
+                let visible = state.visibleTree(model.folderTree)   // FolderFilterBar.swift
+                FolderOutline(nodes: visible.nodes, counts: counts, matching: visible.matching)
+                if visible.matching?.isEmpty == true {
+                    Text("No Matching Folders").foregroundStyle(.secondary)
+                }
             }
         } header: {
-            FoldersSectionHeader()
+            FoldersSectionHeader(isExpanded: $showsFolders)
         }
+        .collapsible(false)
     }
 
     @ViewBuilder

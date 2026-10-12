@@ -16,7 +16,21 @@ struct TagsSidebarSection: View {
     private var store: TagStore { .shared }
 
     var body: some View {
-        Section(isExpanded: $isExpanded) {
+        Section {
+            if isExpanded { tagRows }
+        } header: {
+            SidebarSectionHeader("Tags", isExpanded: $isExpanded) {
+                Button { TagActions.newTag(model: model) } label: { Image(systemName: "plus") }
+                    .buttonStyle(.borderless)
+                    .help("New Tag")
+                    .accessibilityLabel("New Tag")
+            }
+        }
+        .collapsible(false)   // SidebarSectionHeader's chevron instead of the hover one
+    }
+
+    @ViewBuilder
+    private var tagRows: some View {
             ForEach(store.photoTags) { tag in
                 DisclosureGroup(isExpanded: Binding(get: { !collapsed.contains(tag.id) },
                                                     set: { if $0 { collapsed.remove(tag.id) } else { collapsed.insert(tag.id) } })) {
@@ -39,17 +53,6 @@ struct TagsSidebarSection: View {
                         .help("\(tag.name): \(tag.values.joined(separator: ", "))")
                 }
             }
-        } header: {
-            HStack {
-                Text("Tags")
-                Spacer()
-                Button { TagActions.newTag(model: model) } label: { Image(systemName: "plus") }
-                    .buttonStyle(.borderless)
-                    .help("New Tag")
-                    .accessibilityLabel("New Tag")
-            }
-            .padding(.vertical, 2)
-        }
     }
 
     @ViewBuilder
