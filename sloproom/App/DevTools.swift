@@ -183,7 +183,7 @@ enum DevScript {
                 case "scroll": DevelopDevScript.scrollInspector(Double(arg) ?? 0)   // 0 = top ... 1 = bottom
                 case "quit": NSApp.terminate(nil)
                 case "devphoto": DevTools.addPhoto(arg, model: model)   // "devphoto Development|/path/to/file.DNG"
-                case let c where c.hasPrefix("import"): ImportDevCommands.run(c, arg: arg, model: model)
+                case let c where c.hasPrefix("import"): await ImportDevCommands.run(c, arg: arg, model: model)
                 case "export": await ExportDevScript.run(arg, model: model)   // see Export/UI/ExportDevScript.swift
                 case "catalog": await CatalogTransferDevScript.run(arg, model: model)   // see CatalogTransfer/CatalogTransferDevScript.swift
                 case "rr": await RecentRendersDevScript.run(arg, model: model)   // see Previews/UI/RecentRendersDevScript.swift

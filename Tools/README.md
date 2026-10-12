@@ -72,7 +72,9 @@ Snapshots must also be written inside the container. View them with the Read too
   (`Develop/Adjustments/UI/DevelopDevScript.swift`), `mask linear|radial [cx cy]|brush`, `maskoverlay`,
   `maskcreate` (`Develop/Masking/UI/MaskDevScript.swift`), `lightroom preview|import <lrcat>` /
   `lightroom snapshot <png>` (`LightroomImport/LightroomImportDev.swift`), `import…`
-  (`Import/ImportDevCommands.swift`), `aspect preset <name>|custom`, and in `App/IntegrationDevScript.swift`:
+  (`Import/ImportDevCommands.swift`: `importsheet`, `importsource <dir>`, `importdest <dir>`, `importwait`,
+  `importdump`, `importrun`, `importconflict rename|replace|skip`, `importdetect on|off`, `importpattern …`,
+  `importdone`, `importmore`, `importsnapshot <png>` (+ `<png>-alert.png` when an alert is up)), `aspect preset <name>|custom`, and in `App/IntegrationDevScript.swift`:
   `activate`, `menu <Top>/<Item>[/<Sub>]` (performs a real menu item), `folder new <n>[ in <parent>] |
   rename <n> to <m> | add <n> | move <n> | remove | delete <n>`, `selectall`, `focus <i>`, `devdump`
   (develop session state), `snapwin <png>` (newest window, e.g. Settings), `keqv <letter>`.
@@ -141,8 +143,11 @@ Snapshots must also be written inside the container. View them with the Read too
 
 ## sdimport_check.swift
 
-SD card import engine (scan, RAW+JPEG sidecars, duplicates, safe copy into date folders, catalog
-insert + folder, cancel, no-write-access error). Copies sample pairs into a fake card first:
+SD card import engine (scan, RAW+JPEG sidecars, ignored videos, duplicates + matches, safe copy into date
+folders, destination preview, conflict policies rename / replace / skip, catalog insert + folder, cancel
+(no empty date folders left), no-write-access error, copy onto an exFAT disk image it creates + attaches
+under the out dir). Copies sample pairs into a fake card first (any folder of DNG+JPG pairs, e.g.
+`/Volumes/T9/Lightroom/2026/2026-09-11`):
 
 ```sh
 Tools/harness.sh /private/tmp/claude-501/out-sdimport/sdimport_check Tools/sdimport_check.swift \

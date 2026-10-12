@@ -2,7 +2,8 @@
 //  LibraryGridView.swift
 //  sloproom
 //
-//  Thumbnail grid for the current source.
+//  Thumbnail grid for the current source, grouped by day under sticky headers when sorted by
+//  date (`model.dateSections`, View > Group by Date; clicking a header selects that day).
 //  Mouse: click / ⌘-click / ⇧-click select, double-click opens Develop, drag photos onto a
 //  sidebar folder (dragging a selected photo drags the whole selection).
 //  Keys (registry actions via the shortcut dispatcher; defaults): grid focused — arrows move
@@ -56,21 +57,18 @@ struct LibraryGridView: View {
     private func grid(columns: Int) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns), spacing: spacing) {
-                    ForEach(model.photos) { photo in
-                        PhotoGridCell(photo: photo,
-                                      isSelected: model.selection.contains(photo.id),
-                                      isFocused: model.focusedPhotoID == photo.id,
-                                      onTogglePick: { FlagActions.togglePick(photo, model: model) })
-                            .id(photo.id)
-                            .onTapGesture(count: 2) { model.openInDevelop(photo.id) }
-                            .simultaneousGesture(TapGesture().onEnded {
-                                let flags = NSEvent.modifierFlags
-                                model.click(photoID: photo.id, command: flags.contains(.command), shift: flags.contains(.shift))
-                                isGridFocused = true
-                            })
-                            .onDrag { PhotoDrag.provider(for: photo, model: model, selectUnselected: true) } preview: { PhotoDrag.preview(photo, model: model) }
-                            .contextMenu { PhotoActionMenuItems(model: model, clicked: photo.id) }   // Actions/ registry
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: columns), spacing: spacing,
+                          pinnedViews: [.sectionHeaders]) {
+                    if model.dateSections.isEmpty {
+                        ForEach(model.photos) { cell($0) }
+                    } else {
+                        ForEach(model.dateSections) { section in
+                            Section {
+                                ForEach(model.photos[section.range]) { cell($0) }
+                            } header: {
+                                sectionHeader(section)
+                            }
+                        }
                     }
                 }
                 .padding(padding)
@@ -81,6 +79,7 @@ struct LibraryGridView: View {
             .focusEffectDisabled()
             .onChange(of: isGridFocused, initial: true) { _, focused in keys.isGridFocused = focused }
             .onChange(of: columns, initial: true) { _, n in keys.columns = n }
+            .onChange(of: model.dateSections, initial: true) { _, sections in keys.sectionStarts = sections.map(\.range.lowerBound) }
             .onChange(of: model.focusedPhotoID) { _, id in
                 guard let id else { return }
                 withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(id) }
@@ -90,6 +89,43 @@ struct LibraryGridView: View {
                 if let id = model.focusedPhotoID { proxy.scrollTo(id, anchor: .center) }
             }
         }
+    }
+
+    private func cell(_ photo: Photo) -> some View {
+        PhotoGridCell(photo: photo,
+                      isSelected: model.selection.contains(photo.id),
+                      isFocused: model.focusedPhotoID == photo.id,
+                      onTogglePick: { FlagActions.togglePick(photo, model: model) })
+            .id(photo.id)
+            .onTapGesture(count: 2) { model.openInDevelop(photo.id) }
+            .simultaneousGesture(TapGesture().onEnded {
+                let flags = NSEvent.modifierFlags
+                model.click(photoID: photo.id, command: flags.contains(.command), shift: flags.contains(.shift))
+                isGridFocused = true
+            })
+            .onDrag { PhotoDrag.provider(for: photo, model: model, selectUnselected: true) } preview: { PhotoDrag.preview(photo, model: model) }
+            .contextMenu { PhotoActionMenuItems(model: model, clicked: photo.id) }   // Actions/ registry
+    }
+
+    /// Sticky day header; a click selects the day's photos (⌘-click adds them to the selection).
+    private func sectionHeader(_ section: PhotoDateSection) -> some View {
+        HStack(spacing: 8) {
+            Button {
+                let ids = model.photos[section.range].map(\.id)
+                if NSEvent.modifierFlags.contains(.command) { model.selection.formUnion(ids) } else { model.selection = Set(ids) }
+                if let first = ids.first, !NSEvent.modifierFlags.contains(.command) || model.focusedPhotoID == nil { model.focusedPhotoID = first }
+                isGridFocused = true
+            } label: {
+                Text(section.title).font(.subheadline.weight(.semibold))
+            }
+            .buttonStyle(.plain)
+            .help("Select the photos of \(section.title) (⌘-click adds them to the selection)")
+            Text("\(section.range.count)").font(.caption).foregroundStyle(.secondary).monospacedDigit()
+            Spacer()
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .background(.bar)
     }
 
     // MARK: Keys
@@ -109,8 +145,8 @@ struct LibraryGridView: View {
         return [
             move(.moveLeft) { -1 },
             move(.moveRight) { 1 },
-            move(.moveUp) { -keys.columns },
-            move(.moveDown) { keys.columns },
+            move(.moveUp) { vertical(down: false, model: model, keys: keys) },
+            move(.moveDown) { vertical(down: true, model: model, keys: keys) },
             ShortcutHandler(.openInDevelop, when: { _ in keys.isGridFocused && model.focusedPhotoID != nil }) { _ in
                 if let id = model.focusedPhotoID { model.openInDevelop(id) }
             },
@@ -120,6 +156,14 @@ struct LibraryGridView: View {
             ShortcutHandler(.thumbnailLarger) { _ in stepCellSize(up: true) },
             ShortcutHandler(.thumbnailSmaller) { _ in stepCellSize(up: false) },
         ]
+    }
+
+    /// Row step for ↑ / ↓ (rows restart at every day section).
+    private static func vertical(down: Bool, model: AppModel, keys: GridKeyState) -> Int {
+        guard let current = model.focusedPhotoID.flatMap(model.index(of:)) else { return down ? keys.columns : -keys.columns }
+        guard !keys.sectionStarts.isEmpty else { return down ? keys.columns : -keys.columns }
+        return PhotoDateSections.verticalTarget(from: current, down: down, columns: keys.columns,
+                                                starts: keys.sectionStarts, count: model.photos.count) - current
     }
 
     /// ⌘= / ⌘-: one step of the size slider.
@@ -191,5 +235,7 @@ struct LibraryGridView: View {
 final class GridKeyState {
     @ObservationIgnored var isGridFocused = false
     @ObservationIgnored var columns = 1
+    /// First photo index of each day section (empty = not grouped).
+    @ObservationIgnored var sectionStarts: [Int] = []
     var pendingCatalogRemoval: [Int64]?
 }

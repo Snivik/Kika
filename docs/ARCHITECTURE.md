@@ -30,9 +30,9 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project slo
 | `App/AppModel.swift`, `FolderTree.swift`, `SloproomCommands.swift` | app state, folder tree, menu bar (+ `TextInputGuard`) |
 | `App/DevTools.swift`, `App/IntegrationDevScript.swift` | "Add Folder in Place (Dev)", `DevScript` (DEBUG UI scripting); feature DevScript files live next to their feature |
 | `Catalog/*` | SQLite wrapper, catalog open/migrate, photos / folders / roots / crop-preset API, models, security scope |
-| `Import/*` | SD card / folder import: engine (`ImportEngine`), sheet state (`ImportSession`), sources, sheet UI, EXIF reader (`PhotoMetadataReader`) |
+| `Import/*` | SD card / folder import: engine (`ImportEngine`), sheet state (`ImportSession`), sources, sheet UI, recap page (`ImportRecapView`), EXIF reader (`PhotoMetadataReader`) |
 | `LightroomImport/*` | Lightroom Classic catalog import (structure only), root access status / grants (`RootAccess`, `RootsAccessView`) |
-| `Library/*` | main window, grid, cells, filmstrip, sidebar; `ThumbnailView` (the only preview loader) |
+| `Library/*` | main window, grid (day sections: `PhotoDateSections`), cells, filmstrip, sidebar; `ThumbnailView` (the only preview loader) |
 | `Library/Sidebar/*` | folder management (create/rename/delete/move/reorder, DnD, context menus), sidebar state, folders DevScript (key/click synthesis) |
 | `Library/Flags/*` | flag actions (auto-advance), grid filter bar, `LibraryKeyMonitor` (installs the shortcut dispatcher; D, ⌘A) |
 | `Previews/*` (+ `Previews/UI/*`) | preview service, disk cache, lanes, build jobs, settings, recent Develop renders + neighbour prefetch (+ settings view, Library > Previews menu, toolbar activity, `rr` DevScript) |
@@ -379,6 +379,10 @@ pinch (free-form) / two-finger double tap (smart magnify: Fit ↔ 100 %) / ⌘- 
 
 ### Folders / flags UI (`Library/Sidebar/*`, `Library/Flags/*`)
 
+- Grid grouping: when sorted by a date, `model.dateSections` (`PhotoDateSections.make`, consecutive photos of a day)
+  gives sticky day headers (click = select that day, ⌘-click adds); ↑ / ↓ use `PhotoDateSections.verticalTarget`
+  (rows restart per section). `model.groupByDate` (default on, `library.groupByDate`): View > Group by Date and the
+  filter bar's "By Date" toggle.
 - Sidebar rows `SidebarItem` (`.all/.lastImport/.picked/.rejected/.folder`); Picked / Rejected are
   `.all` + `filter.flag` (`model.sidebarItem`, `model.selectSidebarItem(_:)`, `model.shownFolderID`).
 - `FolderActions` (create + inline rename, rename, delete, move, add/move/remove photos),
@@ -793,11 +797,34 @@ edited elsewhere are dropped after `.photosUpdated`. `purgeAll()` resets all in-
   `adoptSidecarOffsets(_:)` (used by `ImportScanner.readMetadata`) re-read a RAW's wall-clock time with
   its sidecar's offset when the RAW has none and the wall-clock times match.
 - `Photo(url:metadata:importDate:sidecarPath:)` builds an insertable photo.
-- SD card / folder import (`Import/`): `ImportScanner` (enumerate, RAW+JPEG pairing, metadata),
-  `DuplicateIndex`, `ImportJob.run` (Copy to Destination with safe copy into date folders, or Add in
-  Place; one import date; optional new folder) → `ImportJob.warmPreviews` queues a thumbnail build job.
+- SD card / folder import (`Import/`): `ImportScanner` (`scan` = enumerate + ignored non-photo files by
+  extension, e.g. videos; RAW+JPEG pairing, metadata), `DuplicateIndex` (`match` → the catalog photo id),
+  `ImportDestinationPlanner.plan` (destination preview: the touched date folders (existing / new, "+N") plus the
+  existing folders next to them, name conflicts, and `identicalIDs` = an identical file (name + size) is already
+  in the target folder),
+  `ImportJob.run` (Copy to Destination with safe copy into date folders, or Add in Place; one import date;
+  optional new folder) → `ImportJob.warmPreviews` queues a thumbnail build job.
   Copying needs write access to the destination (read/write user-selected-files entitlement, or the
   container).
+- Safe copy: `name.tmp` → fsync → size check → `ImportFiles.renameExclusive` (`renamex_np(RENAME_EXCL)`;
+  exFAT / FAT / SMB answer ENOTSUP, so there an exclusive-create placeholder is renamed over). Date folders a
+  run created and left empty (all copies failed / cancelled) are removed again (`result.createdFolders` = kept).
+- Conflicts (`ImportOptions.conflictPolicy`, `duplicateMatches`): a photo conflicts when its target file name
+  exists in the destination folder or it matches a catalog photo the user chose to import anyway. `.rename` =
+  keep both (`name-1`, new photo), `.replace` = overwrite the file and update the photo at that path / the
+  matched photo (`Catalog.replaceImportedPhoto`: path, metadata, import date; edits, flags, folders and its
+  virtual copies follow; previews discarded), `.skip`. `ImportResult` carries the recap (`renamed`,
+  `replacedPhotoIDs`, `skippedConflicts`, `destinationFolders`, `createdFolders`, `failures`, `stopError`).
+- A photo is a duplicate when it is in the catalog OR identical to a file already in its destination folder;
+  matching re-runs whenever the destination / pattern / mode changes (photos show "comparing" again). Locked
+  destination duplicates that aren't catalogued are adopted (`ImportOptions.adoptExisting`: the file already
+  there is catalogued, nothing copied; `result.adoptedExisting`).
+- Sheet (`ImportSession` + `ImportPhotosSheet`): status icon per photo while "Don't import suspected duplicates"
+  is on (comparing → duplicate (greyed, locked) / new); Import waits for matching to finish;
+  the right column shows the destination tree (Lightroom's merged view); Import → conflict check →
+  Rename / Replace / Skip alert → progress → `ImportRecapView` (imported, replaced, renamed, destination
+  folders, not imported with reasons incl. videos) with Import More / Show Imported Photos. DevScript:
+  `import…` commands in `ImportDevCommands.swift`.
 - Lightroom Classic import (`LightroomImport/`): `LightroomCatalogReader.load(copying:)` (reads a temp
   copy), `LightroomImportPlan` (collection sets + collections → folders under a "Lightroom" folder,
   virtual copies → master), `Catalog.importLightroom` (idempotent: re-import adds nothing), roots

@@ -3,8 +3,10 @@
 //  sloproom
 //
 //  File > Import Photos… (⇧⌘I). Lightroom-like: source (cards / folders) on the left, a checkable
-//  thumbnail grid grouped by capture day in the middle, destination + options on the right,
-//  import progress in the footer. State: ImportSession; engine: ImportEngine.
+//  thumbnail grid grouped by capture day in the middle (status icon per photo while duplicates are
+//  matched), destination preview (existing / new folders, "+N") + options on the right, import
+//  progress in the footer, a Rename / Replace / Skip prompt for conflicts, and a recap page
+//  (`ImportRecapView`) when the import ends. State: ImportSession; engine: ImportEngine.
 //
 
 import AppKit
@@ -37,25 +39,48 @@ private struct ImportPhotosContent: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                ImportSourceColumn(session: session)
-                    .frame(width: 210)
-                Divider()
-                ImportGridColumn(session: session)
+            if let summary = session.recap {
+                ImportRecapView(summary: summary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 Divider()
-                ImportOptionsColumn(session: session)
-                    .frame(width: 270)
+                recapFooter(summary)
+            } else {
+                HStack(spacing: 0) {
+                    ImportSourceColumn(session: session)
+                        .frame(width: 210)
+                    Divider()
+                    ImportGridColumn(session: session)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    Divider()
+                    ImportOptionsColumn(session: session)
+                        .frame(width: 290)
+                }
+                Divider()
+                footer
             }
-            Divider()
-            footer
         }
         .interactiveDismissDisabled(session.isImporting)
+        .alert(conflictTitle, isPresented: Binding(
+            get: { session.conflictPrompt != nil },
+            set: { if !$0 { session.conflictPrompt = nil } }
+        ), presenting: session.conflictPrompt) { _ in
+            Button("Rename") { session.startImport(policy: .rename) }
+                .help("Keep both: copy under a new name (e.g. L1000123-1) and add as a new photo")
+            Button("Replace") { session.startImport(policy: .replace) }
+                .help("Overwrite the existing file; the existing catalog photo keeps its edits, flags and folders")
+            Button("Skip") { session.startImport(policy: .skip) }
+                .help("Import everything else; leave these photos out")
+            Button("Cancel", role: .cancel) {}
+        } message: { prompt in
+            Text(conflictMessage(prompt))
+        }
         .onAppear {
             session.refreshVolumes()
             session.autoSelectCard()
             #if DEBUG
-            ImportDevCommands.attach(session, start: startImport)
+            ImportDevCommands.attach(session, start: { session.requestImport() }, done: {
+                if let summary = session.recap { done(summary) }
+            })
             #endif
         }
         .onDisappear { session.cancelScan() }
@@ -83,6 +108,10 @@ private struct ImportPhotosContent: View {
                 Button("Stop Import") { session.cancelImport() }
                     .keyboardShortcut(.cancelAction)
                     .help("Stop after the current file (photos already copied stay imported)")
+            } else if session.isPreparing {
+                ProgressView().controlSize(.small)
+                Text("Checking the destination for existing files…").font(.callout).foregroundStyle(.secondary)
+                Spacer()
             } else {
                 if let error = session.errorMessage {
                     Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -95,14 +124,44 @@ private struct ImportPhotosContent: View {
                 Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
                     .help("Close without importing (Esc)")
-                Button(importTitle) { startImport() }
+                if session.isMatching, session.sourceURL != nil {
+                    Text("Matching with the catalog…").font(.caption).foregroundStyle(.secondary)
+                }
+                Button(importTitle) { session.requestImport() }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!session.canImport)
-                    .help("Import the checked photos (Return)")
+                    .help(session.isMatching ? "Available once every photo was compared with the catalog" : "Import the checked photos (Return)")
             }
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+    }
+
+    private func recapFooter(_ summary: ImportRecap) -> some View {
+        HStack(spacing: 12) {
+            Spacer()
+            Button("Import More") { session.returnFromRecap() }
+                .help("Back to the import window (the source is scanned again)")
+            Button(summary.succeeded ? "Show Imported Photos" : "Done") { done(summary) }
+                .keyboardShortcut(.defaultAction)
+                .help(summary.succeeded ? "Close and show the imported photos (Return)" : "Close (Return)")
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+    }
+
+    private var conflictTitle: String {
+        guard let n = session.conflictPrompt?.count else { return "" }
+        return n == 1 ? "1 photo was imported before" : "\(n) photos were imported before"
+    }
+
+    private func conflictMessage(_ p: ImportConflictPrompt) -> String {
+        var parts: [String] = []
+        if p.fileConflicts > 0 { parts.append("\(p.fileConflicts) already exist\(p.fileConflicts == 1 ? "s" : "") in the destination folder") }
+        if p.catalogDuplicates > 0 { parts.append("\(p.catalogDuplicates) \(p.catalogDuplicates == 1 ? "is" : "are") already in the catalog") }
+        let more = p.count > p.examples.count ? ", …" : ""
+        return parts.joined(separator: " and ") + " (" + p.examples.joined(separator: ", ") + more + ").\n\n"
+            + "Rename keeps both (new photos under new names). Replace overwrites the existing files and updates the photos already in the catalog (edits, flags and folders stay). Skip leaves them out."
     }
 
     private var importTitle: String {
@@ -122,21 +181,18 @@ private struct ImportPhotosContent: View {
         t < 60 ? "\(max(1, Int(t.rounded()))) s left" : "\(Int((t / 60).rounded(.up))) min left"
     }
 
-    private func startImport() {
-        session.startImport { result in
-            if let folderID = result.folderID {
+    /// Recap closed: show what was imported (its folder, else Previous Import).
+    private func done(_ summary: ImportRecap) {
+        if summary.succeeded {
+            if let folderID = summary.result.folderID {
                 model.selectedSource = .folder(id: folderID, includeSubfolders: model.includeSubfolders)
             } else {
-                model.selectedSource = .lastImport
+                model.selectSidebarItem(.lastImport)
             }
             model.mode = .library
             model.selection = []
-            if !result.failures.isEmpty {
-                model.errorMessage = "Imported \(result.photoIDs.count) photos, but some files failed:\n"
-                    + result.failures.prefix(10).joined(separator: "\n")
-            }
-            dismiss()
         }
+        dismiss()
     }
 }
 
@@ -298,7 +354,11 @@ private struct ImportGridColumn: View {
         let size = chosen.reduce(Int64(0)) { $0 + $1.totalSize }
         var s = "\(chosen.count) of \(all.count) photos selected · \(bytes(size))"
         let dups = all.filter { session.duplicates.contains($0.id) }.count
-        if dups > 0 { s += " · \(dups) already imported" }
+        if dups > 0 { s += " · \(dups) already in the catalog" }
+        let onDisk = all.filter { !session.duplicates.contains($0.id) && session.isInDestination($0) }.count
+        if onDisk > 0 { s += " · \(onDisk) already in the destination" }
+        let videos = session.ignoredFiles.filter { ImportScanner.videoExtensions.contains($0.key) }.values.reduce(0, +)
+        if videos > 0 { s += " · \(videos) video\(videos == 1 ? "" : "s") not imported" }
         if session.isScanning { s += " · " + session.scanStatus }
         return s
     }
@@ -312,7 +372,10 @@ private struct ImportGridColumn: View {
                             ImportCandidateCell(candidate: c,
                                                 isIncluded: session.isIncluded(c),
                                                 isDuplicate: session.duplicates.contains(c.id),
-                                                isLocked: session.isLocked(c))
+                                                isIdenticalInDestination: !session.duplicates.contains(c.id) && session.isInDestination(c),
+                                                isLocked: session.isLocked(c),
+                                                matchState: session.skipDuplicates ? session.matchState(c) : nil,
+                                                existsInDestination: session.isIncluded(c) && session.existsInDestination(c))
                                 .onTapGesture { session.toggle(c) }
                         }
                     } header: {
@@ -359,7 +422,13 @@ private struct ImportCandidateCell: View {
     let candidate: ImportCandidate
     let isIncluded: Bool
     let isDuplicate: Bool
+    /// Not in the catalog, but an identical file is already in its destination folder.
+    let isIdenticalInDestination: Bool
     let isLocked: Bool
+    /// Shown while "Don't import suspected duplicates" is on.
+    let matchState: ImportMatchState?
+    /// Checked, and a file with its name is already in the destination folder.
+    let existsInDestination: Bool
 
     var body: some View {
         VStack(spacing: 4) {
@@ -373,6 +442,9 @@ private struct ImportCandidateCell: View {
                         .background(RoundedRectangle(cornerRadius: 4).fill(.background.opacity(isIncluded ? 0 : 0.7)))
                         .padding(2)
                 }
+                .overlay(alignment: .topTrailing) {
+                    if let matchState { ImportMatchBadge(state: matchState).padding(3) }
+                }
             Text(candidate.primary.fileName)
                 .font(.caption)
                 .lineLimit(1)
@@ -381,6 +453,7 @@ private struct ImportCandidateCell: View {
                 if candidate.sidecar != nil { badge("RAW+JPG", .secondary) }
                 else if candidate.primary.isRAW { badge("RAW", .secondary) }
                 if isDuplicate { badge("Imported", .orange) }
+                if existsInDestination || isIdenticalInDestination { badge("In Destination", .orange) }
             }
             .frame(height: 14)
         }
@@ -388,7 +461,11 @@ private struct ImportCandidateCell: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(isIncluded ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.04)))
         .opacity(isLocked ? 0.45 : 1)
         .contentShape(Rectangle())
-        .help(isLocked ? "Already in the catalog (turn off “Don't import suspected duplicates” to import again)" : candidate.primary.url.path)
+        .help(isLocked && isIdenticalInDestination
+              ? "An identical file is already in the destination folder: not copied again; it's added to the catalog as it is"
+              : isLocked ? "Already in the catalog (turn off “Don't import suspected duplicates” to import again)"
+              : existsInDestination ? "\(candidate.primary.fileName) already exists in its destination folder; you'll be asked to rename, replace or skip"
+              : candidate.primary.url.path)
     }
 
     private func badge(_ text: String, _ color: Color) -> some View {
@@ -399,6 +476,186 @@ private struct ImportCandidateCell: View {
             .padding(.vertical, 1)
             .overlay(RoundedRectangle(cornerRadius: 3).stroke(color.opacity(0.6), lineWidth: 0.5))
     }
+}
+
+/// Duplicate-matching status of an import cell: comparing → already in the catalog (greyed
+/// cell) / new. Monochrome white on a dark backing, like the library's flag badges.
+private struct ImportMatchBadge: View {
+    let state: ImportMatchState
+
+    var body: some View {
+        Group {
+            switch state {
+            case .processing:
+                ProgressView().controlSize(.mini).tint(.white)
+            case .matched:
+                Image(systemName: "checkmark.circle.fill").font(.system(size: 13, weight: .semibold))
+            case .unmatched:
+                Image(systemName: "plus.circle.fill").font(.system(size: 13, weight: .semibold))
+            }
+        }
+        .foregroundStyle(.white)
+        .frame(width: 20, height: 20)
+        .background(Circle().fill(.black.opacity(0.55)))
+        .help(help)
+        .accessibilityLabel(help)
+    }
+
+    private var help: String {
+        switch state {
+        case .processing: "Comparing with the catalog…"
+        case .matched: "Already in the catalog: not imported"
+        case .unmatched: "New: not in the catalog yet"
+        }
+    }
+}
+
+// MARK: - Destination preview
+
+/// Lightroom-style merged view of the destination: the existing folders, the ones the import adds
+/// photos to ("+N", files already there), the ones it creates (NEW), and name conflicts (they
+/// trigger the Rename / Replace / Skip prompt). Untouched existing folders are dimmed; long runs
+/// of them collapse into "N more folders".
+private struct ImportDestinationTree: View {
+    @Bindable var session: ImportSession
+    @State private var expanded: Set<String> = []
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if let plan = session.destinationPlan {
+                let children = Dictionary(grouping: plan.folders.filter { $0.depth > 0 }) { $0.parentPath ?? "" }
+                VStack(alignment: .leading, spacing: 0) {
+                    if let root = plan.folders.first { rows(root, children: children) }
+                }
+                .padding(6)
+                .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.04)))
+                legend
+                Text(summary(plan))
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                HStack(spacing: 6) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading the destination and comparing photos…").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .opacity(session.isPlanning && session.destinationPlan != nil ? 0.6 : 1)
+    }
+
+    /// A folder and (recursively) its children; untouched siblings collapse when there are many.
+    private func rows(_ f: ImportDestinationFolder, children: [String: [ImportDestinationFolder]]) -> AnyView {
+        let kids = children[f.path] ?? []
+        let untouched = kids.filter { !touched($0) }
+        let collapse = untouched.count > 4 && !expanded.contains(f.path)
+        let shown = collapse ? kids.filter(touched) : kids
+        return AnyView(VStack(alignment: .leading, spacing: 0) {
+            row(f, isLeaf: kids.allSatisfy { !touched($0) })
+            ForEach(shown) { rows($0, children: children) }
+            if collapse {
+                Button { expanded.insert(f.path) } label: {
+                    Text("\(untouched.count) more existing folder\(untouched.count == 1 ? "" : "s")…")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, CGFloat(f.depth + 1) * 14 + 21)
+                .padding(.vertical, 2)
+                .help("Show the folders of \(f.name) this import doesn't add to")
+            } else if untouched.count > 4 {
+                Button { expanded.remove(f.path) } label: {
+                    Text("Hide untouched folders").font(.caption).foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .padding(.leading, CGFloat(f.depth + 1) * 14 + 21)
+                .padding(.vertical, 2)
+                .help("Only show the folders this import adds to or creates")
+            }
+        })
+    }
+
+    private func touched(_ f: ImportDestinationFolder) -> Bool { f.adding > 0 || f.identical > 0 }
+
+    private func row(_ f: ImportDestinationFolder, isLeaf: Bool) -> some View {
+        let isNew = !f.exists
+        let dim = !touched(f) && f.depth > 0
+        return HStack(spacing: 5) {
+            Image(systemName: f.depth == 0 ? "externaldrive" : isNew ? "folder.badge.plus" : touched(f) ? "folder.fill" : "folder")
+                .foregroundStyle(isNew ? Color.accentColor : .secondary)
+                .frame(width: 16)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(f.name)
+                    .italic(isNew)
+                    .fontWeight(isNew || (touched(f) && f.depth > 0) ? .semibold : .regular)
+                    .foregroundStyle(isNew ? Color.accentColor : dim ? .secondary : .primary)
+                    .lineLimit(1).truncationMode(.middle)
+                if touched(f), isLeaf, let detail = detail(f) {
+                    Text(detail).font(.system(size: 10)).foregroundStyle(f.conflicts > 0 ? Color.orange : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 4)
+            if isNew, f.depth > 0 {
+                Text("NEW").font(.system(size: 9, weight: .bold)).foregroundStyle(Color.accentColor)
+            }
+            if f.adding > 0 {
+                Text("+\(f.adding)")
+                    .font(.caption.monospacedDigit().weight(.semibold))
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(Capsule().fill(Color.accentColor.opacity(0.18)))
+            }
+        }
+        .font(.caption)
+        .opacity(dim ? 0.6 : 1)
+        .padding(.leading, CGFloat(f.depth) * 14)
+        .padding(.vertical, 2)
+        .help(help(f))
+    }
+
+    private var legend: some View {
+        HStack(spacing: 10) {
+            Label("New", systemImage: "folder.badge.plus").foregroundStyle(Color.accentColor)
+            Label("Adds to", systemImage: "folder.fill")
+            Label("Unchanged", systemImage: "folder").foregroundStyle(.secondary)
+        }
+        .font(.system(size: 10))
+        .labelStyle(.titleAndIcon)
+    }
+
+    private func detail(_ f: ImportDestinationFolder) -> String? {
+        var parts: [String] = []
+        if f.exists { parts.append(f.existingFiles == 0 ? "empty" : "\(f.existingFiles) file\(f.existingFiles == 1 ? "" : "s") there") }
+        if f.identical > 0 { parts.append("\(f.identical) already copied") }
+        if f.conflicts > 0 { parts.append("\(f.conflicts) name conflict\(f.conflicts == 1 ? "" : "s")") }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+    }
+
+    private func help(_ f: ImportDestinationFolder) -> String {
+        let place = f.path.isEmpty ? session.destination?.path ?? f.name : f.path
+        guard touched(f) || f.depth == 0 else { return "Existing folder: \(place)\nThis import doesn't add photos to it" }
+        var s = (f.exists ? "Existing folder" : "New folder (created by the import)") + ": \(place)"
+        s += "\n\(f.adding) photo\(f.adding == 1 ? "" : "s") will be added"
+        if f.identical > 0 { s += "\n\(f.identical) already there (identical file): not copied again" }
+        if f.conflicts > 0 { s += "\n\(f.conflicts) with a file name that already exists here (you'll be asked to rename, replace or skip)" }
+        return s
+    }
+
+    private func summary(_ plan: ImportDestinationPlan) -> String {
+        let leaves = plan.folders.filter { f in f.depth == session.pattern.depth && touched(f) }
+        let created = plan.folders.filter { $0.depth > 0 && !$0.exists && touched($0) }.count
+        let existing = leaves.filter { $0.exists && $0.adding > 0 }.count
+        let identical = plan.folders.first?.identical ?? 0
+        var parts: [String] = []
+        if created > 0 { parts.append("creates \(created) new folder\(created == 1 ? "" : "s")") }
+        if existing > 0 { parts.append("adds to \(existing) existing") }
+        if identical > 0 { parts.append("\(identical) already copied") }
+        if plan.conflictIDs.count > 0 { parts.append("\(plan.conflictIDs.count) name conflict\(plan.conflictIDs.count == 1 ? "" : "s")") }
+        if parts.isEmpty { return session.included.isEmpty ? "No photos selected." : "Photos go straight into the destination folder." }
+        return parts.joined(separator: " · ").capitalizedFirst + "."
+    }
+}
+
+private extension String {
+    var capitalizedFirst: String { prefix(1).uppercased() + dropFirst() }
 }
 
 // MARK: - Options column
@@ -461,21 +718,9 @@ private struct ImportOptionsColumn: View {
             .help("Subfolders created in the destination, by capture date")
             .accessibilityLabel("Organize")
             .padding(.horizontal, 8)
-            let planned = session.plannedFolders
-            if !planned.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(planned.prefix(8), id: \.path) { f in
-                        HStack {
-                            Image(systemName: "folder").foregroundStyle(.secondary)
-                            Text(f.path).lineLimit(1)
-                            Spacer()
-                            Text("\(f.count)").foregroundStyle(.secondary).monospacedDigit()
-                        }
-                    }
-                    if planned.count > 8 { Text("+ \(planned.count - 8) more folders").foregroundStyle(.secondary) }
-                }
-                .font(.caption)
-                .padding(.horizontal, 8)
+            if session.destination != nil, session.destinationProblem == nil, !session.candidates.isEmpty {
+                ImportDestinationTree(session: session)
+                    .padding(.horizontal, 8)
             }
         }
     }

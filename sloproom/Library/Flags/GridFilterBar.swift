@@ -3,7 +3,7 @@
 //  sloproom
 //
 //  Bar above the Library grid: flag filter, "Include Subfolders" (when a folder is shown),
-//  photo / selection count.
+//  "By Date" grouping, photo / selection count.
 //
 
 import SwiftUI
@@ -33,6 +33,13 @@ struct GridFilterBar: View {
                     .help("Also show photos of this folder's subfolders")
                     .accessibilityLabel("Include Subfolders")
             }
+
+            Toggle(isOn: $model.groupByDate) {
+                Label("By Date", systemImage: "calendar")
+            }
+            .toggleStyle(.button)
+            .fixedSize()
+            .help("Group photos by day (View > Group by Date)")
 
             Spacer(minLength: 8)
 

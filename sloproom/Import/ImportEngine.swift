@@ -6,9 +6,13 @@
 //    1. `ImportScanner.enumerate` lists supported photos under a source (recursive, no hidden files).
 //    2. `ImportScanner.candidates` pairs RAW + JPEG with the same base name (JPEG = sidecar).
 //    3. `ImportScanner.readMetadata` reads EXIF (header only, parallel) for the grid / duplicates.
-//    4. `DuplicateIndex` flags files already in the catalog (same path, or name + size + capture date).
-//    5. `ImportJob.run` copies safely (`name.tmp` → verify size → exclusive rename, never overwrite),
-//       inserts photos in batches with ONE import date, adds them to a folder, reports progress.
+//    4. `DuplicateIndex` flags files already in the catalog (same path, or name + size + capture date)
+//       and remembers which catalog photo matched.
+//    5. `ImportDestinationPlanner` previews the destination: date folders (existing / new), photos
+//       added to each, and conflicts (a file with the target name already exists).
+//    6. `ImportJob.run` copies safely (`name.tmp` → verify size → exclusive rename; never overwrites
+//       unless the conflict policy is `.replace`), inserts photos in batches with ONE import date,
+//       adds them to a folder, reports progress and a per-photo recap.
 //
 //  The caller must already have sandbox access to the source and destination.
 //
@@ -85,6 +89,26 @@ nonisolated struct ImportOptions: Sendable {
     var targetFolderID: Int64?
     /// Create a folder with this name (inside `targetFolderID` if set) and add the photos to it.
     var newFolderName: String?
+    /// What to do with a photo that conflicts: its target file already exists in the destination,
+    /// or it matches a catalog photo (`duplicateMatches`).
+    var conflictPolicy: ImportConflictPolicy = .rename
+    /// Candidate id → catalog photo it duplicates (from `DuplicateIndex.match`). Only candidates
+    /// the user chose to import anyway belong here.
+    var duplicateMatches: [String: Int64] = [:]
+    /// Candidates whose identical file (same name + size) is already in their destination folder
+    /// but not in the catalog: nothing is copied, the file already there is added to the catalog.
+    var adoptExisting: Set<String> = []
+}
+
+nonisolated enum ImportConflictPolicy: String, Sendable, CaseIterable, Identifiable {
+    /// Keep both: copy under a free name ("L1000123-1") and add a new photo.
+    case rename
+    /// Overwrite the existing file; the existing catalog photo (same path, or the duplicate it
+    /// matched) is updated to the new copy and keeps its edits, flags and folders.
+    case replace
+    /// Leave conflicting photos out.
+    case skip
+    var id: String { rawValue }
 }
 
 nonisolated struct ImportProgress: Sendable {
@@ -115,6 +139,18 @@ nonisolated struct ImportResult: Sendable {
     var wasCancelled = false
     /// Per-file problems that didn't stop the import.
     var failures: [String] = []
+    /// "L1000123.DNG → L1000123-1.DNG" (conflict policy `.rename`).
+    var renamed: [String] = []
+    /// Existing catalog photos updated to the new copy (policy `.replace`); their previews are stale.
+    var replacedPhotoIDs: [Int64] = []
+    /// File names left out because of a conflict (policy `.skip`).
+    var skippedConflicts: [String] = []
+    /// Destination subfolders ("2026/2026-09-19") with the number of photos copied into each.
+    var destinationFolders: [String: Int] = [:]
+    /// Destination subfolders this import created.
+    var createdFolders: [String] = []
+    /// File names catalogued from the identical copy already in the destination (`adoptExisting`).
+    var adoptedExisting: [String] = []
     /// Set when the import stopped early (e.g. no write access). Photos copied before that are
     /// still catalogued.
     var stopError: ImportError?
@@ -159,21 +195,35 @@ nonisolated enum ImportScanner {
     /// videos and other files ignored), sorted by path. `progress` gets the running count.
     static func enumerate(_ directory: URL, isCancelled: () -> Bool = { false },
                           progress: (Int) -> Void = { _ in }) -> [ImportFile] {
+        scan(directory, isCancelled: isCancelled, progress: progress).files
+    }
+
+    /// `enumerate`, plus the visible regular files that were left out (videos, sidecars like
+    /// .XMP / .THM…), counted by upper-cased extension ("MOV": 17).
+    static func scan(_ directory: URL, isCancelled: () -> Bool = { false },
+                     progress: (Int) -> Void = { _ in }) -> (files: [ImportFile], ignored: [String: Int]) {
         let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
         guard let e = FileManager.default.enumerator(at: directory, includingPropertiesForKeys: keys,
-                                                     options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return [] }
+                                                     options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { return ([], [:]) }
         var files: [ImportFile] = []
+        var ignored: [String: Int] = [:]
         for case let url as URL in e {
             if isCancelled() { break }
-            guard PhotoMetadataReader.isSupportedImage(url: url),
-                  let v = try? url.resourceValues(forKeys: Set(keys)), v.isRegularFile == true else { continue }
+            guard let v = try? url.resourceValues(forKeys: Set(keys)), v.isRegularFile == true else { continue }
+            guard PhotoMetadataReader.isSupportedImage(url: url) else {
+                let ext = url.pathExtension.uppercased()
+                ignored[ext.isEmpty ? "(no extension)" : ext, default: 0] += 1
+                continue
+            }
             files.append(ImportFile(url: url, fileSize: Int64(v.fileSize ?? 0), modificationDate: v.contentModificationDate,
                                     isRAW: PhotoMetadataReader.isRAW(url: url)))
             if files.count % 100 == 0 { progress(files.count) }
         }
         progress(files.count)
-        return files.sorted { $0.url.path < $1.url.path }
+        return (files.sorted { $0.url.path < $1.url.path }, ignored)
     }
+
+    static let videoExtensions: Set<String> = ["MOV", "MP4", "M4V", "AVI", "MTS", "M2TS", "3GP", "MXF", "INSV", "LRV"]
 
     /// Candidates in input order. With `pairSidecars`, a JPEG (or other non-RAW) with the same
     /// directory + base name (case-insensitive) as a RAW becomes that RAW's sidecar.
@@ -217,14 +267,15 @@ nonisolated enum ImportScanner {
 
 /// Snapshot of the catalog for "already imported" detection. Build once per scan (off-main).
 nonisolated struct DuplicateIndex: Sendable {
-    private var paths: Set<String> = []
-    /// "lowercased file name|size" -> capture dates of catalog photos.
-    private var fingerprints: [String: [Date?]] = [:]
+    /// Catalog path → photo id (0 = imported in this session, id unknown).
+    private var paths: [String: Int64] = [:]
+    /// "lowercased file name|size" -> (photo id, capture date) of catalog photos.
+    private var fingerprints: [String: [(id: Int64, date: Date?)]] = [:]
 
     init(catalog: Catalog) throws {
         for f in try catalog.importFingerprints() {
-            paths.insert(f.path)
-            fingerprints["\(f.fileName.lowercased())|\(f.fileSize)", default: []].append(f.captureDate)
+            paths[f.path] = f.id
+            fingerprints["\(f.fileName.lowercased())|\(f.fileSize)", default: []].append((f.id, f.captureDate))
         }
     }
 
@@ -232,17 +283,20 @@ nonisolated struct DuplicateIndex: Sendable {
 
     /// True if a photo with the same path is catalogued, or one with the same file name + size
     /// and (when both are known) a capture date within a second.
-    func isDuplicate(_ file: ImportFile, metadata: PhotoMetadata?) -> Bool {
-        if paths.contains(file.url.standardizedFileURL.path) { return true }
-        guard let dates = fingerprints["\(file.fileName.lowercased())|\(file.fileSize)"] else { return false }
-        guard let date = metadata?.captureDate else { return true }
-        return dates.contains { d in d.map { abs($0.timeIntervalSince(date)) < 1 } ?? true }
+    func isDuplicate(_ file: ImportFile, metadata: PhotoMetadata?) -> Bool { match(file, metadata: metadata) != nil }
+
+    /// The catalog photo `file` duplicates (see `isDuplicate`), nil if none.
+    func match(_ file: ImportFile, metadata: PhotoMetadata?) -> Int64? {
+        if let id = paths[file.url.standardizedFileURL.path] { return id }
+        guard let entries = fingerprints["\(file.fileName.lowercased())|\(file.fileSize)"] else { return nil }
+        guard let date = metadata?.captureDate else { return entries.first?.id }
+        return entries.first { e in e.date.map { abs($0.timeIntervalSince(date)) < 1 } ?? true }?.id
     }
 
     /// Remember files imported in this session (so re-scans before a catalog reload still match).
     mutating func add(_ file: ImportFile, metadata: PhotoMetadata?) {
-        paths.insert(file.url.standardizedFileURL.path)
-        fingerprints["\(file.fileName.lowercased())|\(file.fileSize)", default: []].append(metadata?.captureDate)
+        paths[file.url.standardizedFileURL.path] = 0
+        fingerprints["\(file.fileName.lowercased())|\(file.fileSize)", default: []].append((0, metadata?.captureDate))
     }
 }
 
@@ -283,10 +337,16 @@ nonisolated enum ImportFiles {
         return base
     }
 
+    /// True if `base.<ext>` exists in `directory` for any of `extensions`.
+    static func exists(_ base: String, extensions: [String], in directory: URL) -> Bool {
+        uniqueBaseName(base, extensions: extensions, in: directory) != base
+    }
+
     /// Copies `source` to `destination` via `destination.tmp` (exclusive create), fsyncs,
-    /// verifies the size, preserves dates, then renames without ever overwriting. On any failure
-    /// or cancellation the temp file is removed. `onBytes` gets each chunk's byte count.
-    static func copy(_ source: URL, to destination: URL, isCancelled: () -> Bool = { false },
+    /// verifies the size, preserves dates, then renames without ever overwriting (unless
+    /// `replace`: then an existing file is atomically replaced). On any failure or cancellation
+    /// the temp file is removed. `onBytes` gets each chunk's byte count.
+    static func copy(_ source: URL, to destination: URL, replace: Bool = false, isCancelled: () -> Bool = { false },
                      onBytes: (Int64) -> Void = { _ in }) throws -> Int64 {
         let tmp = destination.path + ".tmp"
         let src = open(source.path, O_RDONLY)
@@ -342,11 +402,180 @@ nonisolated enum ImportFiles {
         if let d = attrs[.modificationDate] { keep[.modificationDate] = d }
         if !keep.isEmpty { try? FileManager.default.setAttributes(keep, ofItemAtPath: tmp) }
 
-        guard renamex_np(tmp, destination.path, UInt32(RENAME_EXCL)) == 0 else {
-            throw ImportError.io("Can't rename to \(destination.lastPathComponent)", errno)
+        if replace {
+            guard rename(tmp, destination.path) == 0 else {
+                throw ImportError.io("Can't replace \(destination.lastPathComponent)", errno)
+            }
+        } else {
+            try renameExclusive(tmp, to: destination.path)
         }
         ok = true
         return total
+    }
+
+    /// `rename` that fails with EEXIST instead of overwriting. `renamex_np(RENAME_EXCL)` is atomic
+    /// but APFS / HFS+ only: exFAT / FAT cards and drives (and SMB shares) answer ENOTSUP, so
+    /// there the name is reserved first with an exclusive create and the temp file renamed over
+    /// that empty placeholder.
+    static func renameExclusive(_ from: String, to: String) throws {
+        if renamex_np(from, to, UInt32(RENAME_EXCL)) == 0 { return }
+        let code = errno
+        guard code == ENOTSUP || code == EINVAL || code == ENOTTY else {
+            throw ImportError.io("Can't rename to \((to as NSString).lastPathComponent)", code)
+        }
+        let placeholder = open(to, O_WRONLY | O_CREAT | O_EXCL, 0o644)
+        guard placeholder >= 0 else {
+            throw ImportError.io("Can't create \((to as NSString).lastPathComponent)", errno)
+        }
+        close(placeholder)
+        guard rename(from, to) == 0 else {
+            let code = errno
+            unlink(to)
+            throw ImportError.io("Can't rename to \((to as NSString).lastPathComponent)", code)
+        }
+    }
+}
+
+// MARK: - Destination preview
+
+/// One folder of the destination preview (Lightroom's merged tree).
+nonisolated struct ImportDestinationFolder: Sendable, Hashable, Identifiable {
+    /// Relative to the destination ("2026", "2026/2026-09-19"; "" = the destination itself).
+    var path: String
+    var name: String
+    var depth: Int
+    var exists: Bool
+    /// Visible files already directly inside it (only counted for folders the import adds to).
+    var existingFiles: Int
+    /// Photos the import adds to it (with its subfolders). 0 = an existing folder left untouched.
+    var adding: Int
+    /// Of those, photos whose file name is already taken there.
+    var conflicts: Int
+    /// Photos left out because an identical file (same name + size) is already there.
+    var identical: Int = 0
+    var id: String { path }
+    var parentPath: String? { path.isEmpty ? nil : (path as NSString).deletingLastPathComponent }
+}
+
+nonisolated struct ImportDestinationPlan: Sendable {
+    /// Destination first, then its subfolders depth-first in name order: every folder the import
+    /// adds to or creates, plus the existing folders next to them (`adding == 0`).
+    var folders: [ImportDestinationFolder] = []
+    /// Imported candidates whose target file name (primary or sidecar) is already taken.
+    var conflictIDs: Set<String> = []
+    /// Candidates (all of them, imported or not) whose target folder already holds an identical
+    /// primary file (same name, case-insensitive, and size): duplicates on disk.
+    var identicalIDs: Set<String> = []
+    /// Candidates whose metadata was known when planning (their target folder is final).
+    var plannedIDs: Set<String> = []
+}
+
+nonisolated extension DestinationPattern {
+    /// Folder levels below the destination (2026/2026-09-01 → 2).
+    var depth: Int {
+        switch self {
+        case .yearAndDay: 2
+        case .day: 1
+        case .none: 0
+        }
+    }
+}
+
+nonisolated enum ImportDestinationPlanner {
+    /// Where `candidates` would land under `destination` with `pattern`, compared with what is on
+    /// disk. `included` = the candidates the user wants (nil = all); with `lockIdentical` those
+    /// with an identical file in place are left out of the counts (they won't be copied). Reads
+    /// each folder once (call off-main: drives can be slow).
+    static func plan(_ candidates: [ImportCandidate], included: Set<String>? = nil, lockIdentical: Bool = false,
+                     metadata: [String: PhotoMetadata], destination: URL,
+                     pattern: DestinationPattern, now: Date = Date(),
+                     isCancelled: () -> Bool = { false }) -> ImportDestinationPlan {
+        let fm = FileManager.default
+        var plan = ImportDestinationPlan()
+
+        struct Listing { var files: [String: Int64]; var folders: [String] }
+        var listings: [String: Listing?] = [:]
+        /// Visible files (lower-cased name → size) and subfolders of `path` (nil = no such folder).
+        func listing(_ path: String) -> Listing? {
+            if let cached = listings[path] { return cached }
+            let url = path.isEmpty ? destination : destination.appendingPathComponent(path, isDirectory: true)
+            let keys: [URLResourceKey] = [.isDirectoryKey, .fileSizeKey]
+            var result: Listing?
+            if let urls = try? fm.contentsOfDirectory(at: url, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) {
+                var l = Listing(files: [:], folders: [])
+                for u in urls {
+                    let v = try? u.resourceValues(forKeys: Set(keys))
+                    if v?.isDirectory == true { l.folders.append(u.lastPathComponent) }
+                    else { l.files[u.lastPathComponent.lowercased()] = Int64(v?.fileSize ?? 0) }
+                }
+                result = l
+            }
+            listings[path] = result
+            return result
+        }
+
+        var bySub: [String: [ImportCandidate]] = [:]
+        for c in candidates {
+            let meta = metadata[c.id]
+            if meta != nil { plan.plannedIDs.insert(c.id) }
+            bySub[pattern.subpath(for: ImportScanner.date(of: c.primary, metadata: meta) ?? now), default: []].append(c)
+        }
+
+        var nodes: [String: ImportDestinationFolder] = [:]
+        func node(_ path: String) -> ImportDestinationFolder {
+            if let n = nodes[path] { return n }
+            let l = listing(path)
+            let url = path.isEmpty ? destination : destination.appendingPathComponent(path, isDirectory: true)
+            let n = ImportDestinationFolder(path: path, name: path.isEmpty ? destination.lastPathComponent : (path as NSString).lastPathComponent,
+                                            depth: path.isEmpty ? 0 : path.split(separator: "/").count,
+                                            exists: l != nil || fm.fileExists(atPath: url.path),
+                                            existingFiles: l?.files.count ?? 0, adding: 0, conflicts: 0)
+            nodes[path] = n
+            return n
+        }
+
+        for (sub, items) in bySub {
+            if isCancelled() { break }
+            let taken = listing(sub)?.files ?? [:]
+            let identical = items.filter { taken[$0.primary.fileName.lowercased()] == $0.primary.fileSize }
+            plan.identicalIDs.formUnion(identical.map(\.id))
+            let identicalIDs = Set(identical.map(\.id))
+            let imported = items.filter { c in
+                (included?.contains(c.id) ?? true) && !(lockIdentical && identicalIDs.contains(c.id))
+            }
+            let conflicting = imported.filter { c in c.files.contains { taken[$0.fileName.lowercased()] != nil } }
+            plan.conflictIDs.formUnion(conflicting.map(\.id))
+            let lockedHere = lockIdentical ? identical.filter { included?.contains($0.id) ?? true }.count : 0
+            guard !imported.isEmpty || lockedHere > 0 else { continue }
+            // The folder and every ancestor up to the destination.
+            var path = sub
+            while true {
+                var n = node(path)
+                n.adding += imported.count
+                n.conflicts += conflicting.count
+                n.identical += lockedHere
+                nodes[path] = n
+                if path.isEmpty { break }
+                path = (path as NSString).deletingLastPathComponent
+            }
+        }
+        _ = node("")
+
+        // Existing folders next to the touched ones (one level down from each touched folder,
+        // down to the pattern's depth), so the user sees where the new photos land.
+        for n in nodes.values where n.depth < pattern.depth && n.exists {
+            for name in listing(n.path)?.folders ?? [] {
+                let path = n.path.isEmpty ? name : n.path + "/" + name
+                guard nodes[path] == nil else { continue }
+                nodes[path] = ImportDestinationFolder(path: path, name: name, depth: n.depth + 1, exists: true,
+                                                      existingFiles: 0, adding: 0, conflicts: 0)
+            }
+        }
+
+        plan.folders = nodes.values.sorted { a, b in
+            a.path.isEmpty ? !b.path.isEmpty : b.path.isEmpty ? false : a.path.localizedStandardCompare(b.path) == .orderedAscending
+        }
+        return plan
     }
 }
 
@@ -386,6 +615,37 @@ nonisolated final class ImportJob: @unchecked Sendable {
             p.photosAdded = result.photoIDs.count
             batch.removeAll()
         }
+        /// Queues a new photo, or with `.replace` updates the photo already at its path / the
+        /// catalog duplicate it matched (keeping that photo's edits, flags and folders).
+        func add(_ photo: Photo, match: Int64?) throws {
+            guard options.conflictPolicy == .replace,
+                  let existing = try catalog.photoID(path: photo.path) ?? match.flatMap({ $0 > 0 ? $0 : nil }) else {
+                batch.append(photo)
+                return
+            }
+            try catalog.replaceImportedPhoto(id: existing, with: photo)
+            result.replacedPhotoIDs.append(existing)
+            result.photoIDs.append(existing)
+            p.photosAdded = result.photoIDs.count
+        }
+
+        // Destination subfolders this run creates (removed again at the end if left empty).
+        var createdDirectories: [URL] = []
+        func makeDirectory(_ dir: URL, in dest: URL) throws {
+            let fm = FileManager.default
+            var missing: [URL] = []
+            // Plain paths: `standardizedFileURL` drops /private only for paths that exist.
+            var u = dir
+            let stop = dest.path
+            while u.path.count > stop.count, u.path.hasPrefix(stop), !fm.fileExists(atPath: u.path) {
+                missing.append(u)
+                u = u.deletingLastPathComponent()
+            }
+            try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            createdDirectories += missing.reversed()
+        }
+
+        struct SkipConflict: Error {}
 
         for c in candidates {
             if isCancelled { result.wasCancelled = true; break }
@@ -393,41 +653,87 @@ nonisolated final class ImportJob: @unchecked Sendable {
             p.elapsed = Date().timeIntervalSince(start)
             progress(p)
             let meta = metadata[c.id] ?? PhotoMetadataReader.read(url: c.primary.url, sidecar: c.sidecar?.url)
+            let match = options.duplicateMatches[c.id]
 
             switch options.mode {
             case .addInPlace:
                 p.filesDone += c.files.count
+                if match != nil, options.conflictPolicy == .skip {
+                    result.skippedConflicts.append(c.primary.fileName)
+                    continue
+                }
                 guard let meta else { result.failures.append("\(c.primary.fileName): not a readable image"); continue }
-                batch.append(Photo(url: c.primary.url, metadata: meta, importDate: importDate,
-                                   sidecarPath: c.sidecar?.url.standardizedFileURL.path))
+                try add(Photo(url: c.primary.url, metadata: meta, importDate: importDate,
+                              sidecarPath: c.sidecar?.url.standardizedFileURL.path), match: match)
 
             case .copy:
                 let dest = options.destination!
                 let date = ImportScanner.date(of: c.primary, metadata: meta) ?? importDate
                 let sub = options.pattern.subpath(for: date)
                 let dir = sub.isEmpty ? dest : dest.appendingPathComponent(sub, isDirectory: true)
+                if options.adoptExisting.contains(c.id) {
+                    // Already copied earlier (identical file in place): catalog that file, copy nothing.
+                    p.filesDone += c.files.count
+                    p.bytesDone += c.totalSize
+                    let target = dir.appendingPathComponent(c.primary.fileName)
+                    let size = (try? target.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init)
+                    guard size == c.primary.fileSize, try catalog.photoID(path: target.standardizedFileURL.path) == nil,
+                          var m = meta ?? PhotoMetadataReader.read(url: target) else { continue }
+                    m.fileSize = c.primary.fileSize
+                    let sidecar = c.sidecar.map { dir.appendingPathComponent($0.fileName) }
+                        .flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0.standardizedFileURL.path : nil }
+                    batch.append(Photo(url: target, metadata: m, importDate: importDate, sidecarPath: sidecar))
+                    result.adoptedExisting.append(c.primary.fileName)
+                    if batch.count >= Self.insertBatchSize { try flush() }
+                    continue
+                }
                 var copied: [URL] = []
+                var fresh: [URL] = []   // files that didn't exist before (removed again on failure)
                 let bytesBefore = p.bytesDone
                 do {
-                    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-                    let base = ImportFiles.uniqueBaseName(c.primary.url.deletingPathExtension().lastPathComponent,
-                                                          extensions: c.files.map(\.url.pathExtension), in: dir)
+                    try makeDirectory(dir, in: dest)
+                    let original = c.primary.url.deletingPathExtension().lastPathComponent
+                    let extensions = c.files.map(\.url.pathExtension)
+                    var base = original
+                    var replacing = false
+                    let fileConflict = ImportFiles.exists(original, extensions: extensions, in: dir)
+                    if fileConflict || match != nil {
+                        switch options.conflictPolicy {
+                        case .skip: throw SkipConflict()
+                        case .replace: replacing = fileConflict
+                        case .rename:
+                            if fileConflict {
+                                base = ImportFiles.uniqueBaseName(original, extensions: extensions, in: dir)
+                                let ext = c.primary.url.pathExtension
+                                result.renamed.append("\(c.primary.fileName) → \(ext.isEmpty ? base : base + "." + ext)")
+                            }
+                        }
+                    }
                     for f in c.files {
                         let ext = f.url.pathExtension
                         let target = dir.appendingPathComponent(ext.isEmpty ? base : base + "." + ext)
-                        _ = try ImportFiles.copy(f.url, to: target, isCancelled: { isCancelled }) { bytes in
+                        let existed = replacing && FileManager.default.fileExists(atPath: target.path)
+                        _ = try ImportFiles.copy(f.url, to: target, replace: existed, isCancelled: { isCancelled }) { bytes in
                             p.bytesDone += bytes
                             p.elapsed = Date().timeIntervalSince(start)
                             progress(p)
                         }
                         copied.append(target)
+                        if !existed { fresh.append(target) }
                     }
                     p.filesDone += copied.count
                     result.filesCopied += copied.count
                     result.bytesCopied += c.totalSize
+                    result.destinationFolders[sub, default: 0] += 1
+                } catch is SkipConflict {
+                    result.skippedConflicts.append(c.primary.fileName)
+                    p.filesDone += c.files.count
+                    p.bytesDone = bytesBefore + c.totalSize
+                    continue
                 } catch {
-                    // All or nothing per photo: remove this candidate's fresh copies (never sources).
-                    for url in copied { unlink(url.path) }
+                    // All or nothing per photo: remove this candidate's fresh copies (never sources,
+                    // never files it replaced — those are complete copies).
+                    for url in fresh { unlink(url.path) }
                     copied = []
                     if error is CancellationError {
                         result.wasCancelled = true
@@ -443,13 +749,21 @@ nonisolated final class ImportJob: @unchecked Sendable {
                 var m = meta ?? PhotoMetadataReader.read(url: primaryURL, sidecar: copied.count > 1 ? copied[1] : nil)
                 m?.fileSize = c.primary.fileSize
                 guard let m else { result.failures.append("\(c.primary.fileName): not a readable image"); continue }
-                batch.append(Photo(url: primaryURL, metadata: m, importDate: importDate,
-                                   sidecarPath: copied.count > 1 ? copied[1].standardizedFileURL.path : nil))
+                try add(Photo(url: primaryURL, metadata: m, importDate: importDate,
+                              sidecarPath: copied.count > 1 ? copied[1].standardizedFileURL.path : nil), match: match)
             }
             if result.wasCancelled || result.stopError != nil { break }
             if batch.count >= Self.insertBatchSize { try flush() }
         }
         try flush()
+
+        // Date folders that stayed empty (every copy into them failed / was cancelled) go away again.
+        if let dest = options.destination {
+            for dir in createdDirectories.reversed() { rmdir(dir.path) }   // deepest first; non-empty ones stay
+            result.createdFolders = createdDirectories
+                .filter { FileManager.default.fileExists(atPath: $0.path) }
+                .map { String($0.path.dropFirst(dest.path.count + 1)) }
+        }
 
         // Folder membership.
         if !result.photoIDs.isEmpty {
