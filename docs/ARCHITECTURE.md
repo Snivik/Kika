@@ -642,7 +642,8 @@ Library, Folders, Dates, Tags; each `Section(isExpanded:)` (Hide / Show on heade
 - Changing a tag's values or scope deletes stored values that no longer fit (the editor warns with counts);
   setting a value of a tag that doesn't apply to photos / folders throws `TagError`.
 - Folder rows show Finder-style overlapping circles after the name. The folder filter (name field = first row of
-  the Folders section, tag menu in the Folders header; `Library/Sidebar/FolderFilterBar.swift`, state in
+  the Folders section, tag menu in the Folders header next to the title (trailing items shift when the
+  section's Hide / Show chevron appears on hover); `Library/Sidebar/FolderFilterBar.swift`, state in
   `FolderSidebarState`; menus don't render inside sidebar List rows) filters folders by name and folder tags
   in memory (`TagValues.satisfies`, the twin of `tagSQL`) via `FolderTree.filtered`: matches plus their ancestors
   (dimmed), all expanded.

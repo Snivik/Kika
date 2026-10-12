@@ -145,8 +145,10 @@ struct FoldersSectionHeader: View {
     var body: some View {
         HStack {
             Text("Folders")
-            Spacer()
+            // Left, next to the title: on hover the section's Hide / Show chevron appears at the trailing edge and
+            // pushes trailing items left, which put "+" under the pointer aimed at the filter.
             FolderTagFilterMenu()   // FolderFilterBar.swift
+            Spacer()
             Button {
                 FolderActions.newFolder(parentID: nil, model: model)
             } label: {
