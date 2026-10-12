@@ -163,6 +163,16 @@ The import sheet can be driven in the sandboxed app with `import…` DevScript c
 `importsheet; wait 2; importsource $C/card; importdest $C/dest; importfolder Test; wait 3; importsnapshot $C/sheet.png; importrun; wait 3; snapshot $C/lib.png; quit`
 (`importclose` before `quit` if a sheet is still open).
 
+## CI and releases
+
+- `ci_checks.sh [out-dir]`: builds and runs the checks that need no sample photos (actions, folders,
+  shortcuts, decode without its RAW render part). GitHub Actions runs it on every push and PR. When a check
+  gains or loses its photo dependency, update the list.
+- `build_release.sh <version> [out-dir]`: universal Release build plus zip (default `build/<version>/`).
+  `SIGN_IDENTITY=-` gives an ad-hoc signature; leave it unset to get the project's own signing.
+- `changelog.sh version | notes [ver] | next`: reads `CHANGELOG.md`. Every push that should ship gets a new
+  top section `## <next minor> — <date>`, written for people. The owner reviews it before the push.
+
 ## All harnesses
 
 Build from the repo root (engine default set + the extra files listed), run, expect `ALL … PASS…`:

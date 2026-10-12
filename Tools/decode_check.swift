@@ -4,7 +4,8 @@
 //  import / export, and their effect on real renders.
 //
 //  Build & run:
-//    Tools/harness.sh /private/tmp/claude-501/decode-out/decode_check Tools/decode_check.swift
+//    Tools/harness.sh /private/tmp/claude-501/decode-out/decode_check Tools/decode_check.swift \
+//      sloproom/Actions/EditSections.swift
 //    /private/tmp/claude-501/decode-out/decode_check [raw-file] [out-dir]
 //
 //  Reads the RAW READ-ONLY; writes only into out-dir (temp catalog + JPEGs).

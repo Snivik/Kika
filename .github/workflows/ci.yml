@@ -1,0 +1,129 @@
+# Tests every push and pull request; on main, releases the top CHANGELOG.md section as an alpha.
+#
+# Release = a CHANGELOG.md section whose version has no v<version> tag yet: builds the universal
+# app (Tools/build_release.sh), tags v<version> and publishes a GitHub pre-release with that section
+# as notes. Pushes without a new section only run the tests.
+#
+# Signing: with the SIGNING_CERT_P12 (base64 .p12 of the owner's "Apple Development" certificate) and
+# SIGNING_CERT_PASSWORD secrets, releases are signed like local builds, so they share the app's
+# container (catalog) and folder access. Without them, the app is signed ad hoc.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode
+        run: |
+          xcode="$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|_rc' | sort -V | tail -1)"
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          "$xcode/Contents/Developer/usr/bin/xcodebuild" -version
+
+      - name: Headless checks
+        run: Tools/ci_checks.sh "$RUNNER_TEMP/checks"
+
+      - name: Build app
+        run: |
+          xcodebuild -project sloproom.xcodeproj -scheme sloproom -configuration Debug \
+            -derivedDataPath "$RUNNER_TEMP/dd" -destination 'generic/platform=macOS' \
+            CODE_SIGNING_ALLOWED=NO -quiet build
+
+  release:
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # tags + commit count (build number)
+
+      - name: Version from CHANGELOG.md
+        id: version
+        run: |
+          v="$(Tools/changelog.sh version)"
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+            echo "::notice::$v is already released. Add a new section to CHANGELOG.md to release."
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          last="$(git tag --list 'v*' | sed 's/^v//' | sort -V | tail -1)"
+          if [ -n "$last" ] && [ "$(printf '%s\n%s\n' "$last" "$v" | sort -V | tail -1)" != "$v" ]; then
+            echo "::error::CHANGELOG.md's top version $v is not newer than the last release $last."
+            exit 1
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+
+      - name: Select Xcode
+        if: steps.version.outputs.release == 'true'
+        run: |
+          xcode="$(ls -d /Applications/Xcode_*.app | grep -viE 'beta|_rc' | sort -V | tail -1)"
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          "$xcode/Contents/Developer/usr/bin/xcodebuild" -version
+
+      - name: Signing certificate
+        if: steps.version.outputs.release == 'true'
+        env:
+          CERT_P12: ${{ secrets.SIGNING_CERT_P12 }}
+          CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+        run: |
+          if [ -z "$CERT_P12" ]; then
+            echo "::warning::No SIGNING_CERT_P12 secret, so this release is signed ad hoc: macOS treats it as a different app from local builds (it asks before opening the existing catalog, and folders need granting again)."
+            echo "SIGN_IDENTITY=-" >> "$GITHUB_ENV"
+            exit 0
+          fi
+          kc="$RUNNER_TEMP/signing.keychain-db"
+          kcpw="$(uuidgen)"
+          security create-keychain -p "$kcpw" "$kc"
+          security set-keychain-settings -lut 21600 "$kc"
+          security unlock-keychain -p "$kcpw" "$kc"
+          echo "$CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$kc" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          rm -f "$RUNNER_TEMP/cert.p12"
+          curl -fsSL https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer -o "$RUNNER_TEMP/wwdr.cer"
+          security import "$RUNNER_TEMP/wwdr.cer" -k "$kc" || true
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kcpw" "$kc" >/dev/null
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          echo "SIGN_IDENTITY=Apple Development" >> "$GITHUB_ENV"
+
+      - name: Build universal app
+        if: steps.version.outputs.release == 'true'
+        env:
+          DERIVED_DATA: ${{ runner.temp }}/dd
+        run: Tools/build_release.sh "${{ steps.version.outputs.version }}" "$RUNNER_TEMP/release"
+
+      - name: Publish pre-release
+        if: steps.version.outputs.release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${{ steps.version.outputs.version }}"
+          notes="$RUNNER_TEMP/notes.md"
+          Tools/changelog.sh notes "$v" > "$notes"
+          cat >> "$notes" <<'EOF'
+
+          ---
+          **Installing this alpha:** unzip and move Sloproom.app to Applications. It isn't notarized, so the
+          first launch is blocked: open it once, then System Settings → Privacy & Security → Open Anyway
+          (or run `xattr -dr com.apple.quarantine /Applications/Sloproom.app`). Needs macOS 15 or later.
+          EOF
+          gh release create "v$v" "$RUNNER_TEMP/release/Sloproom-$v-alpha-universal.zip" \
+            --title "Sloproom $v (alpha)" --notes-file "$notes" --prerelease --target "$GITHUB_SHA"
