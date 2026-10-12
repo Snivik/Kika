@@ -5,6 +5,13 @@
 > **Alpha.** Sloproom is a personal project under active development. Back up your catalog
 > (File → Export Catalog) before updating.
 
+> [!WARNING]
+> **macOS will say it "could not verify Sloproom".** Release builds are signed by the developer but not
+> notarized by Apple (that needs a Developer ID distribution setup this hobby project doesn't have). Pick one:
+> - **Use the release build:** after the warning, choose System Settings → Privacy & Security → **Open Anyway**
+>   (once per download). See [Install](#install).
+> - **Build it yourself** from source and sign it on your own Mac. See [Build it yourself](#build-it-yourself).
+
 ## What is it
 
 A native, non-destructive Mac photo editor built on Apple's RAW image processing framework, the one that comes
@@ -113,6 +120,20 @@ See [CHANGELOG.md](CHANGELOG.md) for what's in each release.
 ```bash
 xattr -dr com.apple.quarantine /Applications/Sloproom.app
 ```
+
+### Build it yourself
+
+You need Xcode 27 on macOS 15 or later.
+
+- **In Xcode:** open `sloproom.xcodeproj`. Under the sloproom target › Signing & Capabilities, pick your own team
+  (a free Apple account works) or "Sign to Run Locally", then choose Product › Run.
+- **From the command line:** this makes an ad-hoc signed universal app and zip in `build/<version>/`:
+
+```bash
+SIGN_IDENTITY=- Tools/build_release.sh 0.2.0
+```
+
+A build you make on your own Mac opens without the warning.
 
 ## Releases
 
