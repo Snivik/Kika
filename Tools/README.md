@@ -170,8 +170,9 @@ The import sheet can be driven in the sandboxed app with `import…` DevScript c
   gains or loses its photo dependency, update the list.
 - `build_release.sh <version> [out-dir]`: universal Release build plus zip (default `build/<version>/`).
   `SIGN_IDENTITY=-` gives an ad-hoc signature; leave it unset to get the project's own signing.
-- `changelog.sh version | notes [ver] | next`: reads `CHANGELOG.md`. Every push that should ship gets a new
-  top section `## <next minor> — <date>`, written for people. The owner reviews it before the push.
+- `changelog.sh version | notes [ver] | next [patch|minor]`: reads `CHANGELOG.md`. Every push that should ship gets a
+  new top section `## <version> — <date>`, written for people: the next patch for fixes, the next minor for
+  significant features. The owner reviews it before the push.
 
 ## All harnesses
 

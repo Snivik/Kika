@@ -4,7 +4,8 @@
 #
 #   Tools/changelog.sh version        top released version, e.g. 0.3.0
 #   Tools/changelog.sh notes [ver]    that section's body (default: the top one), for release notes
-#   Tools/changelog.sh next           the next minor after the latest v* tag (fetches tags), e.g. 0.4.0
+#   Tools/changelog.sh next [patch|minor]   the next version after the latest v* tag (fetches tags);
+#                                     patch (default) for fixes, e.g. 0.3.1; minor for significant features, e.g. 0.4.0
 #
 # Sections are "## <major>.<minor>.<patch> — <date>" (newest first).
 #
@@ -32,11 +33,15 @@ case "${1:-}" in
     git -C "$(dirname "$FILE")" fetch -q --tags 2>/dev/null || true
     last="$(git -C "$(dirname "$FILE")" tag --list 'v*' | sed 's/^v//' | sort -V | tail -1)"
     if [ -z "$last" ]; then top_version; exit 0; fi   # nothing released yet
-    IFS=. read -r major minor _ <<< "$last"
-    echo "$major.$((minor + 1)).0"
+    IFS=. read -r major minor patch <<< "$last"
+    case "${2:-patch}" in
+      patch) echo "$major.$minor.$((patch + 1))" ;;
+      minor) echo "$major.$((minor + 1)).0" ;;
+      *) echo "usage: $0 next [patch|minor]" >&2; exit 2 ;;
+    esac
     ;;
   *)
-    echo "usage: $0 version | notes [version] | next" >&2
+    echo "usage: $0 version | notes [version] | next [patch|minor]" >&2
     exit 2
     ;;
 esac

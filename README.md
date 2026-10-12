@@ -40,8 +40,8 @@ Every push to `main` runs the tests on GitHub Actions ([.github/workflows/ci.yml
   - builds the universal app;
   - tags it `v<version>`;
   - publishes a pre-release that uses that section as its notes.
-- **Versions:** each release goes up one minor version (0.1.0, 0.2.0, …).
-  - `Tools/changelog.sh next` prints the next version.
+- **Versions:** fix releases bump the patch (0.1.0 → 0.1.1); significant new features bump the minor (→ 0.2.0).
+  - `Tools/changelog.sh next` (or `next minor`) prints the next version.
   - Pushes without a new section only run the tests.
 - **Building locally:** `Tools/build_release.sh <version>` makes the same zip in `build/<version>/`.
 
