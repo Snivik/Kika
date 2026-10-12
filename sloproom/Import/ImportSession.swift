@@ -3,8 +3,9 @@
 //  sloproom
 //
 //  State of the Import Photos sheet (MainActor): source selection + sandbox grants, progressive
-//  scan (file list first, then metadata / duplicate flags in chunks), check state, options,
-//  destination, and the running import. Engine work lives in ImportEngine.swift.
+//  scan (file list first, then metadata / duplicate matches in chunks), check state, options,
+//  destination + its preview (`ImportDestinationPlan`), the conflict prompt (Rename / Replace /
+//  Skip), the running import and its recap (`ImportRecap`). Engine work lives in ImportEngine.swift.
 //
 
 import AppKit
@@ -16,6 +17,51 @@ struct ImportSection: Identifiable {
     var id: String
     var title: String
     var items: [ImportCandidate]
+}
+
+/// Duplicate detection state of one candidate (the grid's status icon).
+enum ImportMatchState {
+    /// Not compared yet (metadata not read, or the destination is still being looked at).
+    case processing
+    /// Already in the catalog, or an identical file is already in its destination folder.
+    case matched
+    /// New.
+    case unmatched
+}
+
+/// Photos that would collide with what is already there; the user picks Rename / Replace / Skip.
+struct ImportConflictPrompt {
+    /// Candidates whose target file name is taken in the destination.
+    var fileConflicts: Int
+    /// Candidates that match a catalog photo (included although detected as duplicates).
+    var catalogDuplicates: Int
+    /// Conflicting candidates (both kinds).
+    var count: Int
+    var examples: [String]
+}
+
+/// Recap shown when an import ends (also when nothing was imported).
+struct ImportRecap {
+    var result: ImportResult
+    var mode: ImportMode
+    var policy: ImportConflictPolicy?
+    var sourceTitle: String
+    var destinationPath: String?
+    var folderName: String?
+    /// Photos found in the source (after RAW + JPEG pairing).
+    var found: Int
+    /// Locked duplicates ("Don't import suspected duplicates").
+    var skippedDuplicates: [String]
+    /// Locked because an identical file is already in the destination (not in the catalog: adopted).
+    var inDestination: [String]
+    var unchecked: Int
+    var unreadable: [String]
+    /// Files that aren't photos (videos…) by extension.
+    var ignored: [String: Int]
+
+    var replaced: Int { result.replacedPhotoIDs.count }
+    var added: Int { result.photoIDs.count - replaced - result.adoptedExisting.count }
+    var succeeded: Bool { !result.photoIDs.isEmpty }
 }
 
 @Observable
@@ -34,21 +80,33 @@ final class ImportSession {
     private(set) var isScanning = false
     private(set) var scanStatus = ""
     private(set) var files: [ImportFile] = []
+    /// Files in the source that aren't photos (videos…), by extension.
+    private(set) var ignoredFiles: [String: Int] = [:]
     private(set) var metadata: [String: PhotoMetadata] = [:]
     /// Primary file ids already in the catalog.
     private(set) var duplicates: Set<String> = []
+    /// Primary file id → the catalog photo it duplicates.
+    private(set) var duplicateMatches: [String: Int64] = [:]
+    /// Primary file ids compared with the catalog (metadata read, or unreadable).
+    private(set) var checkedIDs: Set<String> = []
     private(set) var unreadable: Set<String> = []
     private(set) var candidates: [ImportCandidate] = []
     private(set) var sections: [ImportSection] = []
     /// Everything is checked unless the user unchecked it (new candidates start checked).
-    var unchecked: Set<String> = []
+    var unchecked: Set<String> = [] { didSet { schedulePlan() } }
 
     // MARK: Options (remembered)
     var mode: ImportMode = ImportMode(rawValue: UserDefaults.standard.string(forKey: "import.mode") ?? "") ?? .copy {
-        didSet { UserDefaults.standard.set(mode.rawValue, forKey: "import.mode") }
+        didSet {
+            UserDefaults.standard.set(mode.rawValue, forKey: "import.mode")
+            schedulePlan(destinationChanged: true)
+        }
     }
     var pattern: DestinationPattern = DestinationPattern(rawValue: UserDefaults.standard.string(forKey: "import.pattern") ?? "") ?? .yearAndDay {
-        didSet { UserDefaults.standard.set(pattern.rawValue, forKey: "import.pattern") }
+        didSet {
+            UserDefaults.standard.set(pattern.rawValue, forKey: "import.pattern")
+            schedulePlan(destinationChanged: true)
+        }
     }
     var pairSidecars: Bool = UserDefaults.standard.object(forKey: "import.pairSidecars") as? Bool ?? true {
         didSet {
@@ -57,22 +115,37 @@ final class ImportSession {
         }
     }
     var skipDuplicates: Bool = UserDefaults.standard.object(forKey: "import.skipDuplicates") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(skipDuplicates, forKey: "import.skipDuplicates") }
+        didSet {
+            UserDefaults.standard.set(skipDuplicates, forKey: "import.skipDuplicates")
+            schedulePlan()
+        }
     }
     private(set) var destination: Root?
     /// Why the destination can't be used (missing, no write access), nil = fine / unchecked.
     private(set) var destinationProblem: String?
     var targetFolderID: Int64?
     var newFolderName = ""
+    /// Where the included photos land (copy mode), compared with the destination on disk.
+    private(set) var destinationPlan: ImportDestinationPlan?
+    private(set) var isPlanning = false
+    /// Candidates with an identical file (name + size) already in their destination folder.
+    private(set) var destinationIdentical: Set<String> = []
 
     // MARK: Import
     private(set) var isImporting = false
+    /// Checking for conflicts before an import starts.
+    private(set) var isPreparing = false
     private(set) var progress = ImportProgress()
     var errorMessage: String?
+    /// Set when the import would collide with existing photos; the sheet asks Rename / Replace / Skip.
+    var conflictPrompt: ImportConflictPrompt?
+    /// The recap of the last import; the sheet shows it instead of the grid.
+    var recap: ImportRecap?
 
     private var job: ImportJob?
     private var scanTask: Task<Void, Never>?
     private var scanGeneration = 0
+    private var planTask: Task<Void, Never>?
 
     init(catalog: Catalog) {
         self.catalog = catalog
@@ -86,23 +159,40 @@ final class ImportSession {
     // MARK: - Derived
 
     func isIncluded(_ c: ImportCandidate) -> Bool {
-        !unchecked.contains(c.id) && !(skipDuplicates && duplicates.contains(c.id))
+        !unchecked.contains(c.id) && !isLocked(c)
     }
-    func isLocked(_ c: ImportCandidate) -> Bool { skipDuplicates && duplicates.contains(c.id) }
+    /// Already in the catalog, or an identical file is already in its destination folder.
+    func isDuplicate(_ c: ImportCandidate) -> Bool { duplicates.contains(c.id) || isInDestination(c) }
+    func isInDestination(_ c: ImportCandidate) -> Bool { mode == .copy && destinationIdentical.contains(c.id) }
+    func isLocked(_ c: ImportCandidate) -> Bool { skipDuplicates && isDuplicate(c) }
     var included: [ImportCandidate] { candidates.filter(isIncluded) }
 
-    var canImport: Bool {
-        guard !isImporting, sourceURL != nil, !candidates.isEmpty, candidates.contains(where: isIncluded) else { return false }
-        return mode == .addInPlace || (destination != nil && destinationProblem == nil)
+    /// Still comparing with the destination folders (copy mode, destination chosen).
+    private var isMatchingDestination: Bool {
+        mode == .copy && destination != nil && destinationProblem == nil
     }
 
-    /// Destination subfolders with photo counts for the included photos (copy mode).
-    var plannedFolders: [(path: String, count: Int)] {
-        guard pattern != .none else { return [] }
-        let counts = Dictionary(grouping: included) { c in
-            pattern.subpath(for: ImportScanner.date(of: c.primary, metadata: metadata[c.id]) ?? Date())
-        }.mapValues(\.count)
-        return counts.map { ($0.key, $0.value) }.sorted { $0.path < $1.path }
+    func matchState(_ c: ImportCandidate) -> ImportMatchState {
+        guard checkedIDs.contains(c.id) else { return .processing }
+        if duplicates.contains(c.id) { return .matched }
+        if isMatchingDestination, destinationPlan?.plannedIDs.contains(c.id) != true { return .processing }
+        return isInDestination(c) ? .matched : .unmatched
+    }
+
+    /// The included photo's target file already exists in the destination (copy mode).
+    func existsInDestination(_ c: ImportCandidate) -> Bool {
+        mode == .copy && destinationPlan?.conflictIDs.contains(c.id) == true
+    }
+
+    /// Still comparing photos with the catalog / destination (Import waits, so no duplicate slips in).
+    var isMatching: Bool {
+        isScanning || (isMatchingDestination && candidates.contains { matchState($0) == .processing })
+    }
+
+    var canImport: Bool {
+        guard !isImporting, !isPreparing, !isMatching, sourceURL != nil, !candidates.isEmpty,
+              candidates.contains(where: isIncluded) else { return false }
+        return mode == .addInPlace || (destination != nil && destinationProblem == nil)
     }
 
     // MARK: - Sources
@@ -180,7 +270,8 @@ final class ImportSession {
         sourceURL = nil
         sourceID = nil
         sourceTitle = ""
-        files = []; metadata = [:]; duplicates = []; unreadable = []; unchecked = []
+        files = []; ignoredFiles = [:]; metadata = [:]; duplicates = []; duplicateMatches = [:]; checkedIDs = []
+        unreadable = []; unchecked = []
         rebuildCandidates()
     }
 
@@ -204,7 +295,8 @@ final class ImportSession {
         sourceURL = url
         sourceTitle = title
         sourceID = id
-        files = []; metadata = [:]; duplicates = []; unreadable = []; unchecked = []
+        files = []; ignoredFiles = [:]; metadata = [:]; duplicates = []; duplicateMatches = [:]; checkedIDs = []
+        unreadable = []; unchecked = []
         errorMessage = nil
         rebuildCandidates()
         isScanning = true
@@ -213,11 +305,11 @@ final class ImportSession {
         let catalog = catalog
         scanTask = Task.detached(priority: .userInitiated) { [self] in
             let index = (try? DuplicateIndex(catalog: catalog)) ?? DuplicateIndex()
-            let found = ImportScanner.enumerate(url, isCancelled: { Task.isCancelled }) { count in
+            let (found, ignored) = ImportScanner.scan(url, isCancelled: { Task.isCancelled }) { count in
                 Task { @MainActor in self.update(generation) { $0.scanStatus = "Found \(count) photos…" } }
             }
             if Task.isCancelled { return }
-            await MainActor.run { self.update(generation) { $0.files = found; $0.rebuildCandidates() } }
+            await MainActor.run { self.update(generation) { $0.files = found; $0.ignoredFiles = ignored; $0.rebuildCandidates() } }
 
             // Metadata + duplicate flags in chunks, so the grid fills in progressively.
             let chunkSize = 48
@@ -225,13 +317,16 @@ final class ImportSession {
                 if Task.isCancelled { return }
                 let chunk = Array(found[start..<min(start + chunkSize, found.count)])
                 let meta = ImportScanner.readMetadata(chunk)
-                let dups = Set(chunk.filter { index.isDuplicate($0, metadata: meta[$0.id]) }.map(\.id))
+                var matches: [String: Int64] = [:]
+                for f in chunk { if let id = index.match(f, metadata: meta[f.id]) { matches[f.id] = id } }
                 let bad = Set(chunk.map(\.id)).subtracting(meta.keys)
                 let done = start + chunk.count
                 await MainActor.run {
                     self.update(generation) { s in
                         s.metadata.merge(meta) { $1 }
-                        s.duplicates.formUnion(dups)
+                        s.duplicateMatches.merge(matches) { $1 }
+                        s.duplicates.formUnion(matches.keys)
+                        s.checkedIDs.formUnion(chunk.map(\.id))
                         s.unreadable.formUnion(bad)
                         s.scanStatus = "Reading \(done) of \(found.count)…"
                         s.rebuildCandidates()
@@ -269,6 +364,7 @@ final class ImportSession {
         if !undated.isEmpty { result.append(ImportSection(id: "undated", title: "Unknown Date", items: undated)) }
         sections = result
         candidates = result.flatMap(\.items)
+        schedulePlan()
     }
 
     // MARK: - Check state
@@ -310,6 +406,7 @@ final class ImportSession {
         destination = root
         UserDefaults.standard.set(root.path, forKey: "import.destinationPath")
         destinationProblem = nil
+        schedulePlan(destinationChanged: true)   // photos show "comparing" until the new destination is read
         let catalog = catalog
         // Off-main: a sleeping external drive can take a while to answer.
         Task.detached(priority: .userInitiated) { [self] in
@@ -323,19 +420,109 @@ final class ImportSession {
             await MainActor.run {
                 guard self.destination?.id == root.id else { return }
                 self.destinationProblem = problem
+                self.schedulePlan(destinationChanged: true)
             }
         }
     }
 
+    // MARK: - Destination preview
+
+    /// Recomputes `destinationPlan` off-main (debounced; reads the destination folders).
+    /// `destinationChanged`: another folder / pattern / mode — the old plan and the "identical file
+    /// already there" matches no longer apply, so photos show as comparing again.
+    private func schedulePlan(destinationChanged: Bool = false) {
+        planTask?.cancel()
+        if destinationChanged {
+            destinationPlan = nil
+            destinationIdentical = []
+        }
+        guard isMatchingDestination, let dest = destination, !candidates.isEmpty else {
+            destinationPlan = nil
+            destinationIdentical = []
+            isPlanning = false
+            return
+        }
+        isPlanning = true
+        let (all, wanted, lock) = planInputs()
+        let metadata = metadata, pattern = pattern
+        planTask = Task { [self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            if Task.isCancelled { return }
+            let plan = await Task.detached(priority: .userInitiated) {
+                ImportDestinationPlanner.plan(all, included: wanted, lockIdentical: lock, metadata: metadata,
+                                              destination: dest.url, pattern: pattern)
+            }.value
+            if Task.isCancelled { return }
+            apply(plan)
+            isPlanning = false
+        }
+    }
+
+    /// Candidates, the ones the user wants (checked, not catalog duplicates when skipping), and
+    /// whether identical files in the destination are left out.
+    private func planInputs() -> ([ImportCandidate], Set<String>, Bool) {
+        let wanted = Set(candidates.filter { !unchecked.contains($0.id) && !(skipDuplicates && duplicates.contains($0.id)) }.map(\.id))
+        return (candidates, wanted, skipDuplicates)
+    }
+
+    private func apply(_ plan: ImportDestinationPlan) {
+        destinationPlan = plan
+        destinationIdentical = plan.identicalIDs
+    }
+
     // MARK: - Import
 
-    /// Starts the import. `onFinished` runs on main when photos were imported (also after a cancel).
-    func startImport(onFinished: @escaping (ImportResult) -> Void) {
+    /// Import button: checks for conflicts first (target files already in the destination, or
+    /// catalog duplicates the user included); asks Rename / Replace / Skip if there are any.
+    func requestImport() {
+        guard canImport else { return }
+        errorMessage = nil
+        guard mode == .copy, let dest = destination else {
+            promptOrStart(fileConflicts: [])
+            return
+        }
+        isPreparing = true
+        planTask?.cancel()
+        let (all, wanted, lock) = planInputs()
+        let metadata = metadata, pattern = pattern
+        Task { [self] in
+            let plan = await Task.detached(priority: .userInitiated) {
+                ImportDestinationPlanner.plan(all, included: wanted, lockIdentical: lock, metadata: metadata,
+                                              destination: dest.url, pattern: pattern)
+            }.value
+            isPreparing = false
+            isPlanning = false
+            apply(plan)
+            promptOrStart(fileConflicts: included.filter { plan.conflictIDs.contains($0.id) })
+        }
+    }
+
+    private func promptOrStart(fileConflicts: [ImportCandidate]) {
+        let dups = included.filter { duplicates.contains($0.id) }
+        let ids = Set(fileConflicts.map(\.id)).union(dups.map(\.id))
+        guard !ids.isEmpty else {
+            startImport(policy: .rename)
+            return
+        }
+        let names = candidates.filter { ids.contains($0.id) }.map(\.primary.fileName)
+        conflictPrompt = ImportConflictPrompt(fileConflicts: fileConflicts.count, catalogDuplicates: dups.count,
+                                              count: ids.count, examples: Array(names.prefix(4)))
+    }
+
+    /// Starts the import; conflicts are resolved with `policy`. Ends with `recap` set.
+    func startImport(policy: ImportConflictPolicy) {
+        conflictPrompt = nil
         guard canImport, let sourceURL else { return }
         let items = included
+        // Identical file already in the destination but not in the catalog: catalog that file.
+        let adopt = mode == .copy ? candidates.filter { isLocked($0) && !duplicates.contains($0.id) && isInDestination($0) } : []
         let name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let itemIDs = Set(items.map(\.id))
+        let matches = duplicateMatches.filter { itemIDs.contains($0.key) }
         let options = ImportOptions(mode: mode, destination: destination?.url, pattern: pattern,
-                                    targetFolderID: targetFolderID, newFolderName: name.isEmpty ? nil : name)
+                                    targetFolderID: targetFolderID, newFolderName: name.isEmpty ? nil : name,
+                                    conflictPolicy: policy, duplicateMatches: matches,
+                                    adoptExisting: Set(adopt.map(\.id)))
         if mode == .addInPlace {
             // The photos stay on the source, so it must become a root (security-scoped bookmark).
             do { try SecurityScopeManager.shared.registerRoot(url: sourceURL, in: catalog) } catch {
@@ -343,7 +530,18 @@ final class ImportSession {
                 return
             }
         }
+        let hadConflicts = !matches.isEmpty || items.contains(where: existsInDestination)
+        let locked = candidates.filter { isLocked($0) && duplicates.contains($0.id) }.map(\.primary.fileName)
+        let uncheckedCount = candidates.filter { unchecked.contains($0.id) && !isLocked($0) }.count
+        let unreadableNames = files.filter { unreadable.contains($0.id) }.map(\.fileName)
+        let folderName = name.isEmpty ? targetFolderID.flatMap { id in (try? catalog.folder(id: id))?.name } : name
+        let base = ImportRecap(result: ImportResult(importDate: Date()), mode: mode, policy: hadConflicts ? policy : nil,
+                                 sourceTitle: sourceTitle, destinationPath: mode == .copy ? destination?.path : nil,
+                                 folderName: folderName, found: candidates.count, skippedDuplicates: locked,
+                                 inDestination: adopt.map(\.primary.fileName),
+                                 unchecked: uncheckedCount, unreadable: unreadableNames, ignored: ignoredFiles)
         cancelScan()
+        planTask?.cancel()
         errorMessage = nil
         isImporting = true
         progress = ImportProgress()
@@ -354,14 +552,23 @@ final class ImportSession {
         Task.detached(priority: .userInitiated) { [self] in
             var lastUpdate = Date.distantPast
             do {
-                let result = try job.run(items, metadata: metadata, options: options, catalog: catalog) { p in
+                let result = try job.run(items + adopt, metadata: metadata, options: options, catalog: catalog) { p in
                     let now = Date()
                     guard now.timeIntervalSince(lastUpdate) > 0.08 || p.currentFile == nil else { return }
                     lastUpdate = now
                     Task { @MainActor in if self.isImporting { self.progress = p } }
                 }
-                await MainActor.run { self.finish(result, onFinished: onFinished) }
+                if !result.replacedPhotoIDs.isEmpty {
+                    // Replaced files: previews (of the photo and its virtual copies) are stale.
+                    let ids = (try? catalog.idsIncludingVirtualCopies(result.replacedPhotoIDs)) ?? result.replacedPhotoIDs
+                    PreviewService.shared.discard(photoIDs: ids)
+                }
                 ImportJob.warmPreviews(photoIDs: result.photoIDs)
+                await MainActor.run {
+                    var summary = base
+                    summary.result = result
+                    self.finish(summary)
+                }
             } catch {
                 await MainActor.run { self.fail(error) }
             }
@@ -370,23 +577,16 @@ final class ImportSession {
 
     func cancelImport() { job?.cancel() }
 
-    private func finish(_ result: ImportResult, onFinished: (ImportResult) -> Void) {
+    private func finish(_ summary: ImportRecap) {
         isImporting = false
         job = nil
-        if let stop = result.stopError {
-            let done = result.photoIDs.count
-            errorMessage = (done > 0 ? "Imported \(done) photos, then stopped. " : "") + stop.description
-            rescan()
-            return
-        }
-        if result.photoIDs.isEmpty {
-            if !result.wasCancelled {
-                errorMessage = result.failures.isEmpty ? "Nothing was imported." : result.failures.joined(separator: "\n")
-            }
-            rescan()
-            return
-        }
-        onFinished(result)
+        self.recap = summary
+    }
+
+    /// "Import More" on the recap: back to the grid with a fresh scan (catalog matches updated).
+    func returnFromRecap() {
+        recap = nil
+        rescan()
     }
 
     private func fail(_ error: Error) {

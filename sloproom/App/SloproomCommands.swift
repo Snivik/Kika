@@ -52,6 +52,7 @@ struct SloproomCommands: Commands {
             ShortcutMenuButton(.developMode) { model.mode = .develop }
             Divider()
             ShortcutMenuButton(.toggleSidebar) { DevelopPanels.shared.toggleSidebar(in: model.mode) }
+            Toggle("Group by Date", isOn: Binding(get: { model.groupByDate }, set: { model.groupByDate = $0 }))
             Divider()
             KeyboardShortcutsMenuButton()
             Divider()

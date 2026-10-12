@@ -47,6 +47,15 @@ final class AppModel {
     var sort = PhotoSort() { didSet { if sort != oldValue { reloadPhotos() } } }
     private(set) var photos: [Photo] = []
     private var photoIndex: [Int64: Int] = [:]
+    /// Group the Library grid by day when sorted by date (View > Group by Date); remembered.
+    var groupByDate = UserDefaults.standard.object(forKey: "library.groupByDate") as? Bool ?? true {
+        didSet {
+            UserDefaults.standard.set(groupByDate, forKey: "library.groupByDate")
+            updateDateSections()
+        }
+    }
+    /// Day sections of `photos` for the grid (empty = not grouped).
+    private(set) var dateSections: [PhotoDateSection] = []
 
     // MARK: Selection
     var selection: Set<Int64> = []
@@ -104,6 +113,7 @@ final class AppModel {
         focusedPhotoID = nil
         photos = []
         photoIndex = [:]
+        dateSections = []
     }
 
     /// Switches to `newCatalog` (already open): previews service, observers, folders, photos;
@@ -172,6 +182,7 @@ final class AppModel {
             photos = []
         }
         photoIndex = Dictionary(uniqueKeysWithValues: photos.enumerated().map { ($1.id, $0) })
+        updateDateSections()
         let focusWasSelected = focusedPhotoID.map(selection.contains) ?? false
         selection = selection.filter { photoIndex[$0] != nil }
         if let f = focusedPhotoID, photoIndex[f] == nil {
@@ -184,6 +195,10 @@ final class AppModel {
             }
         }
         if let a = selectionAnchorID, photoIndex[a] == nil { selectionAnchorID = nil }
+    }
+
+    private func updateDateSections() {
+        dateSections = groupByDate ? PhotoDateSections.make(photos, key: sort.key) ?? [] : []
     }
 
     /// The photo that took `id`'s place after a reload: the first photo after it in `oldPhotos`
