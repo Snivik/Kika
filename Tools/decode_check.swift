@@ -174,6 +174,39 @@ struct DecodeCheck {
               && (try catalog.decodeCameras().first?.camera.displayName) == "Panasonic DC-S5M2", "camera list with display names")
         check(CameraKey(make: "Leica Camera AG", model: "LEICA SL2").displayName == "LEICA SL2", "display name drops a repeated make")
 
+        // Lightroom-imported photos have no make: their own camera row until the makes are filled in.
+        let lrIDs = try catalog.insertPhotos([photo("/x/P9.RW2", "", "DC-S5M2"), photo("/x/P10.RW2", "", "dc-s5m2 "),
+                                              photo("/x/C1.CR2", "", "Canon EOS 5DS R")])
+        _ = try catalog.saveEditSettings(edited, for: lrIDs[0])
+        let bare = CameraKey(make: nil, model: "DC-S5M2")
+        check(bare != pana && CameraKey(make: "PANASONIC", model: "dc-s5m2") == pana, "identity = make + model, case-insensitive")
+        var cams = try catalog.decodeCameras()
+        check(cams.first { $0.camera == pana }?.count == 3 && cams.first { $0.camera == bare }?.count == 2,
+              "make-less photos are a separate camera row: \(cams.map { "\($0.camera.displayName) \($0.count)" })")
+        let gaps = try catalog.cameraMakeGaps()
+        check(gaps.map(\.model) == ["DC-S5M2", "Canon EOS 5DS R"] && gaps[0].photoCount == 2
+              && gaps[0].knownMakes.map(\.make) == ["Panasonic"] && gaps[1].knownMakes.isEmpty,
+              "gaps: make-less models with the makes other photos have")
+        check(try catalog.cameraMakeSample(model: "canon eos 5ds r")?.id == lrIDs[2], "sample photo to read a make from")
+
+        // A default set on the make-less row applies to what rendering sees (the file's make + model)…
+        let lrBefore = try catalog.photo(id: lrIDs[0])!.editVersion
+        try catalog.setCameraDecodeDefault(bare, profileID: hiISO.id)
+        check(try catalog.photo(id: lrIDs[0])!.editVersion == lrBefore + 1, "default on the make-less row re-renders its edited photos")
+        check(reg.cameraDefault(for: pana)?.id == hiISO.id, "… and applies to the file's make + model while Panasonic has none of its own")
+        try catalog.setCameraDecodeDefault(pana, profileID: dup)
+        check(reg.cameraDefault(for: pana)?.id == dup && reg.cameraDefault(for: bare)?.id == hiISO.id, "an exact default wins")
+
+        // Filling in the make merges the rows and carries the make-less default over (unless one exists).
+        try catalog.setCameraDecodeDefault(pana, profileID: nil)
+        let filled = try catalog.fillCameraMake(model: "DC-S5M2", make: "Panasonic")
+        cams = try catalog.decodeCameras()
+        check(filled == 2 && cams.first { $0.camera == pana }?.count == 5 && !cams.contains { $0.camera == bare }, "fill merges the camera rows")
+        check(try catalog.decodeDefaults().cameras == [pana: hiISO.id], "the make-less default moved to the completed camera")
+        check(try catalog.cameraMakeGaps().map(\.model) == ["Canon EOS 5DS R"], "only the Canon gap is left")
+        check(try catalog.decodeFitPhotos(camera: pana, limit: 10).count == 4, "fit photos: the camera's RAWs (JPEG excluded)")
+        try catalog.setCameraDecodeDefault(pana, profileID: nil)
+
         // Recent renders key follows the registry.
         let h1 = RecentRenderKey.settingsHash(edited)
         try catalog.setGlobalDecodeDefault(hiISO.id)

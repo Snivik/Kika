@@ -67,14 +67,20 @@ nonisolated extension Catalog {
         return (global, cameras)
     }
 
-    /// Cameras in the catalog (master photos only) with their photo counts, most used first.
+    /// Cameras in the catalog (master photos only) with their photo counts, most used first (spellings that
+    /// differ only in case are one camera). Lightroom-imported photos without a make are their own row
+    /// until `fillCameraMakes` completes them.
     func decodeCameras() throws -> [(camera: CameraKey, count: Int)] {
-        try db.query("""
+        let rows = try db.query("""
             SELECT camera_make, camera_model, COUNT(*) FROM photos
             WHERE master_id IS NULL AND (camera_make IS NOT NULL OR camera_model IS NOT NULL)
-            GROUP BY camera_make, camera_model ORDER BY COUNT(*) DESC
+            GROUP BY camera_make, camera_model
             """) { (CameraKey(make: $0.stringOrNil(0), model: $0.stringOrNil(1)), Int($0.int(2))) }
-            .filter { !$0.camera.isEmpty }
+        var merged: [CameraKey: (camera: CameraKey, count: Int)] = [:]
+        for (camera, count) in rows where !camera.isEmpty {
+            merged[camera] = (merged[camera]?.camera ?? camera, (merged[camera]?.count ?? 0) + count)
+        }
+        return merged.values.sorted { $0.count != $1.count ? $0.count > $1.count : $0.camera < $1.camera }
     }
 
     /// Up to `limit` RAW master photos of `camera`, spread evenly over their capture dates
@@ -82,13 +88,85 @@ nonisolated extension Catalog {
     func decodeFitPhotos(camera: CameraKey, limit: Int) throws -> [Photo] {
         let ids = try db.query("""
             SELECT id, path FROM photos
-            WHERE master_id IS NULL AND TRIM(COALESCE(camera_make, '')) = ? AND TRIM(COALESCE(camera_model, '')) = ?
+            WHERE master_id IS NULL AND LOWER(TRIM(COALESCE(camera_make, ''))) = ? AND LOWER(TRIM(COALESCE(camera_model, ''))) = ?
             ORDER BY capture_date, id
-            """, [camera.make, camera.model]) { ($0.int(0), $0.string(1)) }
+            """, [camera.make.lowercased(), camera.model.lowercased()]) { ($0.int(0), $0.string(1)) }
             .filter { RenderPipeline.isRAW(url: URL(fileURLWithPath: $0.1)) }.map(\.0)
         guard ids.count > limit else { return try photos(ids: ids) }
         let step = Double(ids.count) / Double(limit)
         return try photos(ids: (0..<limit).map { ids[Int(Double($0) * step)] })
+    }
+
+    // MARK: Camera makes (Lightroom imports)
+
+    /// A camera model some photos have no make for (Lightroom catalogs store only the model).
+    struct CameraMakeGap: Sendable, Equatable {
+        /// The model as stored on the make-less photos.
+        var model: String
+        /// Make-less master photos of this model.
+        var photoCount: Int
+        /// Makes other photos of the same model have, with their photo counts (most used first).
+        var knownMakes: [(make: String, count: Int)]
+
+        static func == (a: CameraMakeGap, b: CameraMakeGap) -> Bool {
+            a.model == b.model && a.photoCount == b.photoCount && a.knownMakes.map(\.make) == b.knownMakes.map(\.make)
+        }
+    }
+
+    /// Models with make-less photos, most photos first.
+    func cameraMakeGaps() throws -> [CameraMakeGap] {
+        let rows = try db.query("""
+            SELECT TRIM(COALESCE(camera_make, '')), TRIM(camera_model), COUNT(*) FROM photos
+            WHERE master_id IS NULL AND TRIM(COALESCE(camera_model, '')) != ''
+            GROUP BY LOWER(TRIM(COALESCE(camera_make, ''))), LOWER(TRIM(camera_model))
+            """) { (make: $0.string(0), model: $0.string(1), count: Int($0.int(2))) }
+        var gaps: [String: CameraMakeGap] = [:]
+        for r in rows where r.make.isEmpty {
+            gaps[r.model.lowercased()] = CameraMakeGap(model: r.model, photoCount: r.count, knownMakes: [])
+        }
+        for r in rows where !r.make.isEmpty {
+            gaps[r.model.lowercased()]?.knownMakes.append((r.make, r.count))
+        }
+        return gaps.values.map { g in
+            var g = g; g.knownMakes.sort { $0.count > $1.count }; return g
+        }.sorted { $0.photoCount > $1.photoCount }
+    }
+
+    /// One make-less master photo of `model` (to read its make from the file).
+    func cameraMakeSample(model: String) throws -> Photo? {
+        try db.queryFirst("""
+            SELECT id FROM photos WHERE master_id IS NULL AND TRIM(COALESCE(camera_make, '')) = ''
+            AND LOWER(TRIM(camera_model)) = ? ORDER BY id LIMIT 1
+            """, [model.lowercased()]) { $0.int(0) }.flatMap { try photo(id: $0) }
+    }
+
+    /// Sets `make` on every photo (incl. virtual copies) of `model` that has none, and moves a camera
+    /// default set on the make-less camera to the completed one (unless that one has its own).
+    /// Returns the number of photos changed. Re-renders edited photos whose decode changes.
+    @discardableResult
+    func fillCameraMake(model: String, make: String) throws -> Int {
+        let make = make.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !make.isEmpty else { return 0 }
+        let ids = try db.query("""
+            SELECT id FROM photos WHERE TRIM(COALESCE(camera_make, '')) = '' AND LOWER(TRIM(camera_model)) = ?
+            """, [model.lowercased()]) { $0.int(0) }
+        guard !ids.isEmpty else { return 0 }
+        try mutateDecodeProfiles {
+            for chunk in stride(from: 0, to: ids.count, by: 500).map({ Array(ids[$0..<min($0 + 500, ids.count)]) }) {
+                let marks = chunk.map { _ in "?" }.joined(separator: ",")
+                try db.run("UPDATE photos SET camera_make = ? WHERE id IN (\(marks))", [make] + chunk)
+            }
+            let bare = CameraKey(make: nil, model: model), full = CameraKey(make: make, model: model)
+            let defaults = try decodeDefaults().cameras
+            if let id = defaults[bare] {
+                try db.run("DELETE FROM decode_defaults WHERE camera_make = '' AND LOWER(camera_model) = ?", [model.lowercased()])
+                if defaults[full] == nil {
+                    try db.run("INSERT INTO decode_defaults(camera_make, camera_model, profile_id) VALUES (?,?,?)", [make, model, id])
+                }
+            }
+        }
+        postChange(.photosUpdated(Set(ids)))
+        return ids.count
     }
 
     /// Loads profiles + defaults into `DecodeProfileRegistry.shared` (creating the tables if needed).
@@ -182,11 +260,18 @@ nonisolated extension Catalog {
 
     private func setDecodeDefault(_ key: CameraKey, _ profileID: Int64?) throws {
         try mutateDecodeProfiles {
+            // One row per camera identity (older rows may differ only in make).
+            if key.isEmpty {
+                try db.run("DELETE FROM decode_defaults WHERE camera_make = '' AND camera_model = ''")
+            } else {
+                let rows = try db.query("SELECT camera_make, camera_model FROM decode_defaults") { CameraKey(make: $0.string(0), model: $0.string(1)) }
+                for row in rows where row == key && !row.isEmpty {
+                    try db.run("DELETE FROM decode_defaults WHERE camera_make = ? AND camera_model = ?", [row.make, row.model])
+                }
+            }
             if let profileID {
                 try db.run("INSERT OR REPLACE INTO decode_defaults(camera_make, camera_model, profile_id) VALUES (?,?,?)",
                            [key.make, key.model, profileID])
-            } else {
-                try db.run("DELETE FROM decode_defaults WHERE camera_make = ? AND camera_model = ?", [key.make, key.model])
             }
         }
     }

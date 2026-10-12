@@ -23,6 +23,7 @@ struct DecodeProfilesSettingsView: View {
     @State private var usage = 0
     @State private var pendingDelete: DecodeProfile?
     @State private var message: String?
+    @State private var makeGaps: [Catalog.CameraMakeGap] = []
 
     static let fileType = UTType(filenameExtension: DecodeProfileFile.fileExtension, conformingTo: .json) ?? .json
 
@@ -82,7 +83,26 @@ struct DecodeProfilesSettingsView: View {
                     }
                 }
             }
+            makesNotice
             fitStatus
+        }
+    }
+
+    /// Lightroom-imported photos without a camera make show up as a separate camera.
+    @ViewBuilder private var makesNotice: some View {
+        if !makeGaps.isEmpty {
+            let photos = makeGaps.map(\.photoCount).reduce(0, +)
+            HStack(spacing: 8) {
+                Image(systemName: "info.circle").foregroundStyle(.secondary)
+                Text("\(photos.formatted()) photo\(photos == 1 ? "" : "s") (\(makeGaps.map(\.model).joined(separator: ", "))) have no camera make, probably from a Lightroom import, so they're listed as separate cameras.")
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("Fill In Camera Makes…") { store.showsCameraMakesSheet = true }
+            }
+            .font(.callout)
+            .controlSize(.small)
+            .sheet(isPresented: Binding(get: { store.showsCameraMakesSheet }, set: { store.showsCameraMakesSheet = $0 })) {
+                CameraMakesSheet(catalog: model.catalog, gaps: makeGaps) { reloadCameras() }
+            }
         }
     }
 
@@ -271,6 +291,7 @@ struct DecodeProfilesSettingsView: View {
 
     private func reloadCameras() {
         cameras = (try? model.catalog.decodeCameras()) ?? []
+        makeGaps = (try? model.catalog.cameraMakeGaps()) ?? []
     }
 
     private func run(_ body: () throws -> Void) {

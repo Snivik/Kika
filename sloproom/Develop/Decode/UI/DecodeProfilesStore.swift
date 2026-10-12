@@ -19,6 +19,8 @@ final class DecodeProfilesStore {
     private(set) var cameraDefaults: [CameraKey: Int64] = [:]
     /// Bumps on every reload: views that resolve through the registry read it to refresh.
     private(set) var revision = 0
+    /// Settings > Raw Decode's "Fill In Camera Makes" sheet (here so DevScript can open it).
+    var showsCameraMakesSheet = false
 
     func reload() {
         let r = DecodeProfileRegistry.shared

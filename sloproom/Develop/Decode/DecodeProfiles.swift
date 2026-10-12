@@ -107,9 +107,19 @@ nonisolated final class DecodeProfileRegistry: @unchecked Sendable {
     }
 
     func cameraDefault(for camera: CameraKey?) -> DecodeProfile? {
-        guard let camera else { return nil }
         lock.lock(); defer { lock.unlock() }
-        return cameraDefaultIDs[camera].flatMap { profilesByID[$0] }
+        return cameraDefaultID(camera).flatMap { profilesByID[$0] }
+    }
+
+    /// Exact make + model; else, for a file with a make, a default set on the same model WITHOUT a make
+    /// (Lightroom-imported photos before their makes are filled in); else, for a make-less photo, the
+    /// only default of that model. Caller holds `lock`.
+    private func cameraDefaultID(_ camera: CameraKey?) -> Int64? {
+        guard let camera, !camera.isEmpty else { return nil }
+        if let id = cameraDefaultIDs[camera] { return id }
+        if !camera.make.isEmpty { return cameraDefaultIDs[camera.withoutMake] }
+        let sameModel = cameraDefaultIDs.filter { $0.key.model.lowercased() == camera.model.lowercased() }
+        return sameModel.count == 1 ? sameModel.first?.value : nil
     }
 
     var cameraDefaults: [CameraKey: Int64] {
@@ -127,7 +137,7 @@ nonisolated final class DecodeProfileRegistry: @unchecked Sendable {
     func resolve(_ decode: DecodeSettings, camera: CameraKey?) -> ResolvedDecode {
         lock.lock()
         let global = globalDefaultID.flatMap { profilesByID[$0] }
-        let cam = camera.flatMap { cameraDefaultIDs[$0] }.flatMap { profilesByID[$0] }
+        let cam = cameraDefaultID(camera).flatMap { profilesByID[$0] }
         let chosen = decode.profileID.flatMap { profilesByID[$0] }
         lock.unlock()
         var layers = [DecodeLayer(kind: .builtin, profileID: nil, name: "Built-in", params: .builtin)]

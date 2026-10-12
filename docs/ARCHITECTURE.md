@@ -632,8 +632,17 @@ built-in (Apple's per-file defaults + DecodeParams.builtin)
   `DevelopSession` stamps the newest decoder on the first save of an edited RAW, so a macOS update can't change
   edited photos; unknown versions fall back to the newest). Copy / paste / sync section `EditSection.rawDecode`
   (in the paste and sync defaults).
-- `CameraKey(make:model:)` (trimmed like the catalog columns; `displayName` drops a repeated make),
-  `Photo.cameraKey`, `RenderSource.camera` (from the RAW's TIFF properties).
+- `CameraKey(make:model:)` (trimmed; identity = make + model, case-insensitive, so two makers' same-named
+  models never share a default; `displayName` drops a repeated make), `Photo.cameraKey`, `RenderSource.camera`
+  (from the RAW's TIFF properties). **Lightroom-imported photos have no make** (LrC stores only the model), so
+  they form a separate camera row ("DC-S9" next to "Panasonic DC-S9"). The registry tolerates it: a default set
+  on the make-less camera applies to the file's make + model when that camera has no exact default (and a
+  make-less photo takes the only default of its model). `catalog.cameraMakeGaps()` (models with make-less
+  photos + the makes other photos of that model have), `cameraMakeSample(model:)`, `fillCameraMake(model:make:)`
+  (sets the make on every make-less photo of the model, moves a make-less camera default over, re-renders what
+  changed, posts `.photosUpdated`). UI: Settings > Raw Decode shows a notice + "Fill In Camera Makes…"
+  (`UI/CameraMakesSheet`: make from other photos of the model, else read from one of its files; several makes
+  for one model = pick, unchecked by default).
 - `AppleRawDefaults.capture(raw)` — `RenderSource.appleDefaults`: values, supported knobs, decoder versions,
   read from the untouched filter in `makeSource` (before BaselineExposure touches it).
 - `DecodeProfileRegistry.shared` (thread-safe snapshot of the catalog's profiles + defaults; the pipeline

@@ -124,7 +124,11 @@ nonisolated struct DecodeSettings: Codable, Equatable, Sendable, Hashable {
 
 // MARK: - Camera key
 
-/// Camera identity for camera defaults: EXIF make + model, trimmed (same as the catalog columns).
+/// Camera identity for camera defaults: make + model, trimmed, case-insensitive (so two makers'
+/// identically named models never share a default). Lightroom catalogs store only the model, so
+/// Lightroom-imported photos have no make until "Fill In Camera Makes" (Catalog+DecodeProfiles)
+/// completes them; meanwhile `DecodeProfileRegistry` lets a default set on such a make-less camera
+/// apply to the file's own make + model (what rendering sees).
 nonisolated struct CameraKey: Hashable, Sendable, Codable, Comparable {
     let make: String
     let model: String
@@ -134,6 +138,14 @@ nonisolated struct CameraKey: Hashable, Sendable, Codable, Comparable {
         self.make = trim(make)
         self.model = trim(model)
     }
+
+    /// What two keys must share to be the same camera.
+    var identity: String { make.lowercased() + "\u{1F}" + model.lowercased() }
+    /// The same model without a make (how a Lightroom-imported photo of this camera is keyed).
+    var withoutMake: CameraKey { CameraKey(make: nil, model: model) }
+
+    static func == (a: CameraKey, b: CameraKey) -> Bool { a.identity == b.identity }
+    func hash(into hasher: inout Hasher) { hasher.combine(identity) }
 
     var isEmpty: Bool { make.isEmpty && model.isEmpty }
 
@@ -145,7 +157,7 @@ nonisolated struct CameraKey: Hashable, Sendable, Codable, Comparable {
         return model.lowercased().hasPrefix(firstWord.lowercased()) ? model : "\(make) \(model)"
     }
 
-    static func < (a: CameraKey, b: CameraKey) -> Bool { (a.make, a.model) < (b.make, b.model) }
+    static func < (a: CameraKey, b: CameraKey) -> Bool { a.identity < b.identity }
 
     /// From a CIRAWFilter / CGImageSource property dictionary (TIFF Make / Model).
     static func from(properties: [AnyHashable: Any]) -> CameraKey? {
