@@ -120,7 +120,7 @@ jobs:
         run: |
           v="${{ steps.version.outputs.version }}"
           notes="$RUNNER_TEMP/notes.md"
-          Tools/changelog.sh notes "$v" > "$notes"
+          Tools/changelog.sh release-notes > "$notes"   # top section + older unreleased ones
           cat >> "$notes" <<'EOF'
 
           ---
