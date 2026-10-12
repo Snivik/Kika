@@ -17,6 +17,12 @@
 //  Per-photo brightness matching (`cameraMatchedBrightness`) stays on, as in normal rendering:
 //  the fit then finds the curve SHAPE + a residual exposure offset.
 //
+//  Which photos (`Sampling`): every RAW of the camera is placed by capture date, ISO and scene
+//  brightness (EV100 from aperture / shutter / ISO); the 2 % extremes of ISO and EV are dropped, then
+//  farthest-point sampling picks photos as different from each other as possible. `prepareChecked`
+//  skips nearly black / heavily blown previews, and `rejectOutliers` drops photos whose camera JPEG is
+//  far from the RAW (monochrome picture styles, in-camera filters) before fitting.
+//
 
 import Foundation
 import CoreGraphics
@@ -43,13 +49,19 @@ nonisolated enum DecodeProfileFitter {
         var photoCount: Int
         var evaluations: Int
         var seconds: Double
+        /// Photos left out, by reason ("too dark", …), for the summary.
+        var skipped: [String: Int] = [:]
 
         /// RMS Oklab difference × 100 (≈ ΔE; ~2 is just noticeable).
         static func deltaE(_ error: Double) -> Double { sqrt(max(error, 0)) * 100 }
 
         var summary: String {
-            String(format: "Fitted on %d photo%@: difference to the camera JPEGs ΔE %.1f → %.1f, %d evaluations, %.0f s.",
-                   photoCount, photoCount == 1 ? "" : "s", Self.deltaE(errorBefore), Self.deltaE(errorAfter), evaluations, seconds)
+            var text = String(format: "Fitted on %d photo%@: difference to the camera JPEGs ΔE %.1f → %.1f, %d evaluations, %.0f s.",
+                              photoCount, photoCount == 1 ? "" : "s", Self.deltaE(errorBefore), Self.deltaE(errorAfter), evaluations, seconds)
+            if !skipped.isEmpty {
+                text += " Skipped " + skipped.sorted { $0.key < $1.key }.map { "\($0.value) \($0.key)" }.joined(separator: ", ") + "."
+            }
+            return text
         }
     }
 
@@ -82,20 +94,138 @@ nonisolated enum DecodeProfileFitter {
 
     // MARK: Preparing
 
-    /// nil when the RAW can't be opened or has no embedded JPEG of the same framing.
+    /// Why a photo was left out of a fit.
+    nonisolated enum SkipReason: String, Error, Sendable {
+        case unusable = "without a comparable camera JPEG"
+        case tooDark = "nearly black"
+        case tooBright = "heavily blown out"
+        case unlikeJPEG = "unlike their camera JPEG (monochrome style, filter?)"
+    }
+
+    /// nil when the RAW can't be opened or has no comparable embedded JPEG (exposure not checked).
     static func prepare(url: URL) -> Sample? {
+        try? prepareChecked(url: url, checkExposure: false).get()
+    }
+
+    /// The sample, or why it can't be used: no embedded JPEG of the same framing, or (with
+    /// `checkExposure`) a preview that is nearly black (median Oklab L < 0.22 ≈ 1 % luminance) or
+    /// heavily blown (over 25 % of pixels at white).
+    static func prepareChecked(url: URL, checkExposure: Bool = true) -> Swift.Result<Sample, SkipReason> {
         guard let source = RenderPipeline.makeSource(url: url), source.isRAW,
-              let preview = embeddedPreview(url: url) else { return nil }
+              let preview = embeddedPreview(url: url) else { return .failure(.unusable) }
         let rendered = render(source, DecodeParams())
         let size = rendered.extent.size
-        guard size.width >= 32, size.height >= 32 else { return nil }
+        guard size.width >= 32, size.height >= 32 else { return .failure(.unusable) }
         let pw = CGFloat(preview.width), ph = CGFloat(preview.height)
         // Same framing only (a preview cropped to another aspect would compare different content).
-        guard abs(pw / ph - size.width / size.height) < 0.02 else { return nil }
+        guard abs(pw / ph - size.width / size.height) < 0.02 else { return .failure(.unusable) }
         let ci = CIImage(cgImage: preview)
         let scaled = ci.transformed(by: CGAffineTransform(scaleX: size.width / pw, y: size.height / ph))
-        guard let target = oklab(scaled, size: size) else { return nil }
-        return Sample(url: url, source: source, size: size, target: target)
+        guard let target = oklab(scaled, size: size) else { return .failure(.unusable) }
+        if checkExposure {
+            let l = target.map(\.x).sorted()
+            if l[l.count / 2] < 0.22 { return .failure(.tooDark) }
+            if Double(l.filter { $0 > 0.99 }.count) / Double(l.count) > 0.25 { return .failure(.tooBright) }
+        }
+        return .success(Sample(url: url, source: source, size: size, target: target))
+    }
+
+    /// Drops photos whose camera JPEG doesn't represent the RAW: a JPEG with much less colour than the
+    /// render (under 30 % of its mean Oklab chroma: monochrome / sepia picture styles), or a default-render
+    /// error over 4× the median (strong in-camera filters, HDR modes). Keeps at least half; with fewer
+    /// than 4 photos only the colour check applies.
+    static func rejectOutliers(_ samples: [Sample]) -> (kept: [Sample], rejected: [Sample]) {
+        var errors = [Double](repeating: 0, count: samples.count)
+        var colourless = [Bool](repeating: false, count: samples.count)
+        let lock = NSLock()
+        DispatchQueue.concurrentPerform(iterations: samples.count) { i in
+            let s = samples[i]
+            let e = sampleError(s, DecodeParams())
+            var mono = false
+            if let lab = oklab(render(s.source, DecodeParams()), size: s.size) {
+                let renderChroma = lab.reduce(0.0) { $0 + Double(sqrt($1.y * $1.y + $1.z * $1.z)) } / Double(lab.count)
+                let jpegChroma = s.target.reduce(0.0) { $0 + Double(sqrt($1.y * $1.y + $1.z * $1.z)) } / Double(s.target.count)
+                mono = renderChroma > 0.02 && jpegChroma < 0.3 * renderChroma
+            }
+            lock.lock(); errors[i] = e; colourless[i] = mono; lock.unlock()
+        }
+        var rejected = Set(samples.indices.filter { colourless[$0] })
+        if samples.count >= 4 {
+            let median = errors.sorted()[errors.count / 2]
+            rejected.formUnion(samples.indices.filter { errors[$0] > 4 * median })
+        }
+        let byError = samples.indices.sorted { errors[$0] < errors[$1] }
+        while rejected.count > samples.count / 2, let best = byError.first(where: { rejected.contains($0) }) {
+            rejected.remove(best)   // never throw away more than half
+        }
+        return (samples.indices.filter { !rejected.contains($0) }.map { samples[$0] },
+                samples.indices.filter { rejected.contains($0) }.map { samples[$0] })
+    }
+
+    // MARK: Choosing photos
+
+    nonisolated enum Sampling {
+        struct Candidate: Sendable {
+            var id: Int64
+            var date: Date?
+            var iso: Int?
+            var shutter: Double?
+            var aperture: Double?
+
+            /// Scene brightness at ISO 100 (EV100), nil without exposure data.
+            var ev100: Double? {
+                guard let t = shutter, t > 0, let n = aperture, n > 0, let iso, iso > 0 else { return nil }
+                return log2(n * n / t) - log2(Double(iso) / 100)
+            }
+        }
+
+        /// Candidate ids in pick order: the first `count` are the most varied set; up to `2 × count`
+        /// are returned so skipped photos can be replaced. Deterministic.
+        static func order(_ candidates: [Candidate], count: Int) -> [Int64] {
+            guard !candidates.isEmpty, count > 0 else { return [] }
+            var pool = candidates
+            // Drop the extreme 2 % of ISO and scene brightness (odd frames skew a curve fit).
+            if pool.count >= 50 {
+                func trim(_ value: (Candidate) -> Double?) {
+                    let v = pool.compactMap(value).sorted()
+                    guard v.count >= 50 else { return }
+                    let lo = v[Int(Double(v.count) * 0.02)], hi = v[Int(Double(v.count) * 0.98)]
+                    pool = pool.filter { c in value(c).map { (lo...hi).contains($0) } ?? true }
+                }
+                trim { $0.iso.map { log2(Double($0)) } }
+                trim { $0.ev100 }
+            }
+            // Features in 0…1: date rank, log ISO, EV100 (missing = middle).
+            let byDate = pool.indices.sorted { (pool[$0].date ?? .distantPast, pool[$0].id) < (pool[$1].date ?? .distantPast, pool[$1].id) }
+            var dateRank = [Double](repeating: 0.5, count: pool.count)
+            for (rank, i) in byDate.enumerated() { dateRank[i] = pool.count > 1 ? Double(rank) / Double(pool.count - 1) : 0.5 }
+            func normalized(_ value: (Candidate) -> Double?) -> [Double] {
+                let v = pool.map(value)
+                let known = v.compactMap { $0 }
+                guard let lo = known.min(), let hi = known.max(), hi > lo else { return v.map { _ in 0.5 } }
+                return v.map { $0.map { ($0 - lo) / (hi - lo) } ?? 0.5 }
+            }
+            let iso = normalized { $0.iso.map { log2(Double($0)) } }
+            let ev = normalized { $0.ev100 }
+            let features = pool.indices.map { [dateRank[$0], iso[$0], ev[$0]] }
+            func dist(_ a: Int, _ b: Int) -> Double { zip(features[a], features[b]).reduce(0) { $0 + ($1.0 - $1.1) * ($1.0 - $1.1) } }
+            // Farthest-point sampling, starting from the most typical photo (nearest the centroid).
+            let centroid = (0..<3).map { k in features.reduce(0) { $0 + $1[k] } / Double(features.count) }
+            let first = features.indices.min { a, b in
+                zip(features[a], centroid).reduce(0) { $0 + ($1.0 - $1.1) * ($1.0 - $1.1) }
+                    < zip(features[b], centroid).reduce(0) { $0 + ($1.0 - $1.1) * ($1.0 - $1.1) }
+            }!
+            var picked = [first]
+            var nearest = features.indices.map { dist($0, first) }
+            let want = min(pool.count, 2 * count)
+            while picked.count < want {
+                guard let next = nearest.indices.max(by: { nearest[$0] < nearest[$1] }), nearest[next] >= 0 else { break }
+                picked.append(next)
+                for i in nearest.indices { nearest[i] = min(nearest[i], dist(i, next)) }
+                nearest[next] = -1
+            }
+            return picked.map { pool[$0].id }
+        }
     }
 
     // MARK: Fitting

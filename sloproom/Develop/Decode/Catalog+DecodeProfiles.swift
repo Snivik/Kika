@@ -36,6 +36,7 @@ nonisolated extension Catalog {
                 PRIMARY KEY (camera_make, camera_model)
             );
             """)
+        try applyMigration(named: "decode.profiles.origin.v1", sql: "ALTER TABLE decode_profiles ADD COLUMN origin TEXT NULL;")
         let now = Date().timeIntervalSince1970
         try applyMigration(named: "decode.profiles.seed.v1", sql: """
             INSERT INTO decode_profiles(name, params, notes, sort_order, created_at, updated_at) VALUES
@@ -49,10 +50,11 @@ nonisolated extension Catalog {
     // MARK: Reading
 
     func allDecodeProfiles() throws -> [DecodeProfile] {
-        try db.query("SELECT id, name, camera_make, camera_model, params, notes, sort_order FROM decode_profiles ORDER BY sort_order, id") {
+        try db.query("SELECT id, name, camera_make, camera_model, params, notes, sort_order, origin FROM decode_profiles ORDER BY sort_order, id") {
             let camera = CameraKey(make: $0.stringOrNil(2), model: $0.stringOrNil(3))
             return DecodeProfile(id: $0.int(0), name: $0.string(1), params: Self.decodeParams($0.string(4)),
-                                 camera: camera.isEmpty ? nil : camera, sortOrder: Int($0.int(6)), notes: $0.string(5))
+                                 camera: camera.isEmpty ? nil : camera, sortOrder: Int($0.int(6)), notes: $0.string(5),
+                                 origin: $0.stringOrNil(7))
         }
     }
 
@@ -83,18 +85,23 @@ nonisolated extension Catalog {
         return merged.values.sorted { $0.count != $1.count ? $0.count > $1.count : $0.camera < $1.camera }
     }
 
-    /// Up to `limit` RAW master photos of `camera`, spread evenly over their capture dates
-    /// (Match Camera JPEG fitting).
-    func decodeFitPhotos(camera: CameraKey, limit: Int) throws -> [Photo] {
-        let ids = try db.query("""
-            SELECT id, path FROM photos
+    /// Every RAW master photo of `camera` with what Match Camera JPEG samples on (date, ISO, exposure).
+    func decodeFitCandidates(camera: CameraKey) throws -> [DecodeProfileFitter.Sampling.Candidate] {
+        try db.query("""
+            SELECT id, path, capture_date, iso, shutter, aperture FROM photos
             WHERE master_id IS NULL AND LOWER(TRIM(COALESCE(camera_make, ''))) = ? AND LOWER(TRIM(COALESCE(camera_model, ''))) = ?
-            ORDER BY capture_date, id
-            """, [camera.make.lowercased(), camera.model.lowercased()]) { ($0.int(0), $0.string(1)) }
-            .filter { RenderPipeline.isRAW(url: URL(fileURLWithPath: $0.1)) }.map(\.0)
-        guard ids.count > limit else { return try photos(ids: ids) }
-        let step = Double(ids.count) / Double(limit)
-        return try photos(ids: (0..<limit).map { ids[Int(Double($0) * step)] })
+            """, [camera.make.lowercased(), camera.model.lowercased()]) { r -> DecodeProfileFitter.Sampling.Candidate? in
+            guard RenderPipeline.isRAW(url: URL(fileURLWithPath: r.string(1))) else { return nil }
+            return .init(id: r.int(0), date: r.date(2), iso: r.intOrNil(3).map(Int.init), shutter: r.doubleOrNil(4), aperture: r.doubleOrNil(5))
+        }.compactMap { $0 }
+    }
+
+    /// Match Camera JPEG photos of `camera` in pick order (most varied first; up to 2 × `count`, so
+    /// skipped ones can be replaced). See `DecodeProfileFitter.Sampling`.
+    func decodeFitPhotos(camera: CameraKey, count: Int) throws -> [Photo] {
+        let ids = DecodeProfileFitter.Sampling.order(try decodeFitCandidates(camera: camera), count: count)
+        let byID = Dictionary(try photos(ids: ids).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return ids.compactMap { byID[$0] }
     }
 
     // MARK: Camera makes (Lightroom imports)
@@ -187,14 +194,15 @@ nonisolated extension Catalog {
     // MARK: Writing
 
     @discardableResult
-    func createDecodeProfile(name: String, params: DecodeParams, camera: CameraKey? = nil, notes: String = "") throws -> Int64 {
+    func createDecodeProfile(name: String, params: DecodeParams, camera: CameraKey? = nil, notes: String = "",
+                             origin: String? = nil) throws -> Int64 {
         try mutateDecodeProfiles {
             let next = try db.scalarInt("SELECT COALESCE(MAX(sort_order) + 1, 0) FROM decode_profiles") ?? 0
             let now = Date()
             try db.run("""
-                INSERT INTO decode_profiles(name, camera_make, camera_model, params, notes, sort_order, created_at, updated_at)
-                VALUES (?,?,?,?,?,?,?,?)
-                """, [name, camera?.make, camera?.model, DecodeProfileRegistry.json(params), notes, next, now, now])
+                INSERT INTO decode_profiles(name, camera_make, camera_model, params, notes, sort_order, created_at, updated_at, origin)
+                VALUES (?,?,?,?,?,?,?,?,?)
+                """, [name, camera?.make, camera?.model, DecodeProfileRegistry.json(params), notes, next, now, now, origin])
             return db.lastInsertRowID
         }
     }

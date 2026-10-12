@@ -9,7 +9,7 @@
 //    decode default <name>|none    global default;  decode camera <name>|none  = this photo's camera default
 //    decode settings               select Settings > Raw Decode (then `menu Sloproom/Settings…`)
 //    decode makes [dump]           Fill In Camera Makes sheet (Settings open) / list make-less models
-//    decode fit                    Match Camera JPEG for the open photo's camera (else the catalog's first camera)
+//    decode fit [n]                Match Camera JPEG for the open photo's camera (else the catalog's first camera)
 //    decode dump                   chain, overrides, effective values, profiles, fit state
 //
 
@@ -53,7 +53,8 @@ enum DecodeDevScript {
                 guard let camera = session?.source?.camera ?? (try? model.catalog.decodeCameras())?.first?.camera else {
                     print("DevScript: no camera"); return
                 }
-                DecodeFitController.shared.start(camera: camera, catalog: model.catalog)
+                DecodeFitController.shared.start(camera: camera, catalog: model.catalog,
+                                                 count: Int(rest) ?? DecodeFitController.defaultSampleSize)
             case "makes":   // "decode makes" opens Fill In Camera Makes (Settings must be open); "decode makes dump"
                 if rest == "dump" { print("DevScript decode: gaps \((try? model.catalog.cameraMakeGaps()) ?? [])") }
                 else { DecodeProfilesStore.shared.showsCameraMakesSheet = true }

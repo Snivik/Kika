@@ -22,6 +22,13 @@ nonisolated struct DecodeProfile: Codable, Equatable, Sendable, Identifiable, Ha
     var camera: CameraKey?
     var sortOrder: Int = 0
     var notes: String = ""
+    /// What made it: nil = the user (or an import / duplicate); `Origin.cameraMatch` = Match Camera JPEG
+    /// for `camera` (informational).
+    var origin: String?
+
+    nonisolated enum Origin {
+        static let cameraMatch = "cameraMatch"
+    }
 }
 
 /// One layer of a resolved chain (for the UI: where a value comes from).

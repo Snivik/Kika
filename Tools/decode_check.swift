@@ -204,7 +204,20 @@ struct DecodeCheck {
         check(filled == 2 && cams.first { $0.camera == pana }?.count == 5 && !cams.contains { $0.camera == bare }, "fill merges the camera rows")
         check(try catalog.decodeDefaults().cameras == [pana: hiISO.id], "the make-less default moved to the completed camera")
         check(try catalog.cameraMakeGaps().map(\.model) == ["Canon EOS 5DS R"], "only the Canon gap is left")
-        check(try catalog.decodeFitPhotos(camera: pana, limit: 10).count == 4, "fit photos: the camera's RAWs (JPEG excluded)")
+        check(try catalog.decodeFitPhotos(camera: pana, count: 10).count == 4, "fit photos: the camera's RAWs (JPEG excluded)")
+
+        // Match profiles record their origin (informational; copies are the user's).
+        let match = try catalog.createDecodeProfile(name: "Panasonic DC-S5M2 Camera Match (16 photos)", params: DecodeParams(),
+                                                    camera: pana, origin: DecodeProfile.Origin.cameraMatch)
+        let copy = try catalog.duplicateDecodeProfile(id: match)
+        var m = try catalog.allDecodeProfiles().first { $0.id == match }!; m.params.boost = 0.7
+        try catalog.updateDecodeProfile(m)
+        let all = try catalog.allDecodeProfiles()
+        check(all.first { $0.id == match }?.origin == DecodeProfile.Origin.cameraMatch && all.first { $0.id == copy }?.origin == nil,
+              "origin stored, kept on update, not copied")
+        check(try catalog.uniqueDecodeProfileName("Panasonic DC-S5M2 Camera Match (16 photos)") == "Panasonic DC-S5M2 Camera Match (16 photos) 2",
+              "a second run with the same size gets its own name")
+        samplingChecks()
         try catalog.setCameraDecodeDefault(pana, profileID: nil)
 
         // Recent renders key follows the registry.
@@ -212,6 +225,38 @@ struct DecodeCheck {
         try catalog.setGlobalDecodeDefault(hiISO.id)
         check(RecentRenderKey.settingsHash(edited) != h1, "recent-render hash changes with the profiles")
         try catalog.setGlobalDecodeDefault(nil)
+    }
+
+    // MARK: - Sampling
+
+    static func samplingChecks() {
+        print("Match Camera JPEG sampling")
+        typealias C = DecodeProfileFitter.Sampling.Candidate
+        // 1,000 photos over two years, ISO 100…12800 (a few extreme 51200), apertures / shutters varied.
+        var rng = SystemRandomNumberGenerator()
+        _ = rng
+        var cands: [C] = []
+        for i in 0..<1000 {
+            let iso = i % 97 == 0 ? 51200 : [100, 200, 400, 800, 1600, 3200, 6400, 12800][(i * 7) % 8]
+            let shutter = [1.0 / 4000, 1.0 / 1000, 1.0 / 250, 1.0 / 60, 1.0 / 15][(i * 3) % 5]
+            cands.append(C(id: Int64(i + 1), date: Date(timeIntervalSince1970: 1_700_000_000 + Double(i) * 60_000),
+                           iso: iso, shutter: shutter, aperture: [1.4, 2.8, 5.6, 11][(i * 5) % 4]))
+        }
+        let order = DecodeProfileFitter.Sampling.order(cands, count: 16)
+        check(order.count == 32 && Set(order).count == 32, "2 × count unique picks for replacing skipped photos")
+        check(order == DecodeProfileFitter.Sampling.order(cands, count: 16), "deterministic")
+        let first = order.prefix(16).compactMap { id in cands.first { $0.id == id } }
+        check(!first.contains { $0.iso == 51200 }, "extreme ISO (top 2 %) left out")
+        let isos = Set(first.compactMap(\.iso))
+        check(isos.contains(100) && isos.contains(12800) && isos.count >= 5, "ISO spread across the range: \(isos.sorted())")
+        let days = first.compactMap(\.date).map(\.timeIntervalSince1970)
+        check((days.max()! - days.min()!) > 0.7 * 999 * 60_000, "dates spread over the whole period")
+        let evs = first.compactMap(\.ev100)
+        check(evs.max()! - evs.min()! > 8, "scene brightness spread (\(String(format: "%.1f", evs.min()!))…\(String(format: "%.1f", evs.max()!)) EV)")
+        let few = DecodeProfileFitter.Sampling.order(Array(cands.prefix(5)), count: 16)
+        check(Set(few).count == 5, "fewer candidates than wanted: all of them")
+        let bare = DecodeProfileFitter.Sampling.order((0..<40).map { C(id: Int64($0), date: nil, iso: nil, shutter: nil, aperture: nil) }, count: 8)
+        check(bare.count == 16, "photos without metadata still sampled")
     }
 
     // MARK: - Rendering
@@ -322,6 +367,19 @@ struct DecodeCheck {
         check(DecodeProfileFitter.dimensions.allSatisfy { d in r.params[keyPath: d.keyPath].map { d.range.contains($0) } ?? false },
               "every fitted parameter set and within bounds")
         check(abs(DecodeProfileFitter.error(samples, r.params) - r.errorAfter) < 1e-3, "fitted (rounded) params reproduce the error")
+        if case .success = DecodeProfileFitter.prepareChecked(url: raw) { check(true, "the portrait passes the exposure checks") }
+        else { check(false, "the portrait passes the exposure checks") }
+        // A monochrome picture style: the camera JPEG has no colour, the RAW does.
+        let mono = samples.map { s in
+            DecodeProfileFitter.Sample(url: s.url, source: s.source, size: s.size, target: s.target.map { SIMD3($0.x, 0, 0) })
+        }
+        let mixed = samples + [mono[0]]
+        let (kept, rejected) = DecodeProfileFitter.rejectOutliers(mixed)
+        check(rejected.count == 1 && rejected[0] === mono[0] && kept.count == samples.count,
+              "a monochrome-style JPEG is dropped as unlike its RAW (kept \(kept.count), dropped \(rejected.count))")
+        check(DecodeProfileFitter.rejectOutliers(samples).rejected.isEmpty, "normal photos are all kept")
+        var withSkips = r; withSkips.skipped = ["nearly black": 2]
+        check(withSkips.summary.hasSuffix("Skipped 2 nearly black."), "summary lists skipped photos")
         var calls = 0
         do {
             _ = try DecodeProfileFitter.fit(samples: samples, isCancelled: { calls += 1; return calls > 3 })

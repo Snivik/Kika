@@ -76,10 +76,22 @@ struct DecodeProfilesSettingsView: View {
                             run { try model.catalog.setCameraDecodeDefault(entry.camera, profileID: id) }
                         }
                         Text("\(entry.count) photo\(entry.count == 1 ? "" : "s")").font(.caption).foregroundStyle(.secondary)
-                        Button("Match Camera JPEG…") { fitter.start(camera: entry.camera, catalog: model.catalog) }
-                            .controlSize(.small)
-                            .disabled(fitter.isRunning)
-                            .help("Fit a profile so unedited photos match this camera's own JPEGs (up to \(DecodeFitController.photoLimit) of its RAWs; curve, black point, brightness, highlight shoulder)")
+                        Menu {
+                            ForEach(DecodeFitController.sampleSizes, id: \.count) { size in
+                                Button("Match on \(size.count) Photos (\(size.duration))") {
+                                    fitter.start(camera: entry.camera, catalog: model.catalog, count: size.count)
+                                }
+                            }
+                        } label: {
+                            Text("Match Camera JPEG…")
+                        } primaryAction: {
+                            fitter.start(camera: entry.camera, catalog: model.catalog)
+                        }
+                        .menuStyle(.button)
+                        .fixedSize()
+                        .controlSize(.small)
+                        .disabled(fitter.isRunning)
+                        .help("Fit a profile so unedited photos match this camera's own JPEGs: base curve, black point, brightness, highlight shoulder. Click for \(DecodeFitController.defaultSampleSize) photos chosen for variety (date, ISO, light); the arrow offers more.")
                     }
                 }
             }
@@ -114,7 +126,7 @@ struct DecodeProfilesSettingsView: View {
                     EmptyView()
                 case .preparing(let done, let total):
                     ProgressView(value: total > 0 ? Double(done) / Double(total) : 0).frame(width: 160)
-                    Text("\(camera.displayName): reading camera JPEGs \(done)/\(total)…")
+                    Text("\(camera.displayName): choosing photos, \(done) of \(total) ready…")
                     Button("Cancel") { fitter.cancel() }
                 case .fitting(let progress):
                     ProgressView(value: progress).frame(width: 160)
@@ -122,7 +134,7 @@ struct DecodeProfilesSettingsView: View {
                     Button("Cancel") { fitter.cancel() }
                 case .finished(let id, let summary):
                     Image(systemName: "checkmark.circle").foregroundStyle(.green)
-                    Text("“\(store.profile(id: id)?.name ?? "Profile")”: \(summary)")
+                    Text("Created “\(store.profile(id: id)?.name ?? "Profile")”: \(summary)")
                         .fixedSize(horizontal: false, vertical: true)
                     Button("Use as Default for \(camera.displayName)") {
                         run { try model.catalog.setCameraDecodeDefault(camera, profileID: id) }

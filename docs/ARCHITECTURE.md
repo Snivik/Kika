@@ -651,7 +651,8 @@ built-in (Apple's per-file defaults + DecodeParams.builtin)
   `RenderSource.resolvedDecode(settings)`. Loaded by `AppModel` when a catalog opens / is replaced.
 - Catalog (`Catalog+DecodeProfiles.swift`, feature migrations `decode.profiles.v1` + `.seed.v1`):
   `decode_profiles(id, name, camera_make, camera_model, params JSON, notes, sort_order, created_at, updated_at)`,
-  `decode_defaults(camera_make, camera_model, profile_id)` (('', '') = global). Seeds: Flat for Editing (boost 0),
+  `decode_defaults(camera_make, camera_model, profile_id)` (('', '') = global); `decode.profiles.origin.v1` adds
+  `decode_profiles.origin` (nil = user / import / duplicate, `cameraMatch`). Seeds: Flat for Editing (boost 0),
   Clean High ISO, Maximum Detail, Previous Highlights (before Oct 2026) (the old 0.2…0.75 clip fade).
   API: `ensureDecodeProfiles`, `reloadDecodeRegistry`, `allDecodeProfiles`, `decodeDefaults`, `decodeCameras`,
   `create/update/delete/duplicateDecodeProfile`, `setGlobalDecodeDefault`, `setCameraDecodeDefault`,
@@ -671,14 +672,21 @@ built-in (Apple's per-file defaults + DecodeParams.builtin)
   knob editing one layer: setting it back to the inherited value or Reset clears it). DevScript `decode …`.
 - Region renders (`RegionRenderer`) key their cached decode on the resolved params + decoder version.
 - **Match Camera JPEG** (`DecodeProfileFitter`, engine; `UI/DecodeFitController` runs it for one camera at a
-  time): `catalog.decodeFitPhotos(camera:limit:)` (≤ 16 RAW masters spread over capture dates) →
-  `prepare(url:)` (the RAW's embedded JPEG, same framing ±2 % aspect, at the ≤ 192 px render size, Oklab) →
+  time, 16 / 32 / 64 photos from a split button): photos = `catalog.decodeFitCandidates(camera:)` (every RAW
+  master of that make + model with date / ISO / shutter / aperture) → `Sampling.order(_:count:)`: drop the 2 %
+  extremes of ISO and EV100, then farthest-point sampling over (date rank, log ISO, EV100) from the most typical
+  photo; returns 2 × count so skipped ones are replaced (`catalog.decodeFitPhotos(camera:count:)`) →
+  `prepareChecked(url:)` (the RAW's embedded JPEG, same framing ±2 % aspect, at the ≤ 192 px render size,
+  Oklab; skips previews with median L < 0.22 = nearly black or > 25 % at white) → `rejectOutliers` (JPEG chroma
+  under 30 % of the render's = monochrome / sepia style; default error > 4× median = filters / HDR modes; keeps ≥
+  half) →
   `fit(samples:maxEvaluations:progress:isCancelled:)`: coordinate descent with step halving over normalised
   `boost`, `boostShadow`, `shadowBias`, `baselineOffset`, `shoulderKnee`, `shoulderHueKeep`; cost = mean over
   photos of the 95 %-trimmed per-pixel ΔL² + 0.5·(Δa² + Δb²) (samples render in parallel, ~20–30 ms each);
   `Result.summary` reports ΔE (RMS Oklab × 100). Noise reduction / sharpening / WB are not fitted; per-photo
-  brightness matching stays on (the fit finds the curve shape + a residual offset). Result: a new profile
-  "<camera> Camera Match" (notes = summary); Settings > Raw Decode offers Use as Default / Show. P1033881's
+  brightness matching stays on (the fit finds the curve shape + a residual offset). Result: a NEW profile per
+  run, "<camera> Camera Match (<n fitted> photos)", `origin = cameraMatch` (informational; notes = summary incl.
+  skipped photos), so runs can be compared; Settings > Raw Decode offers Use as Default / Show. P1033881's
   set (8 Panasonic DC-S9 RAWs): ΔE 2.8 → 2.2 in 23 s.
 - `BaselineExposure` (camera-matched brightness) is measured at Apple's default curve, so a profile with a
   very different `boost` (Flat for Editing) renders darker; the fitter's `baselineOffset` compensates for its camera.
