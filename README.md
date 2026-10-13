@@ -116,7 +116,7 @@ See [CHANGELOG.md](CHANGELOG.md) for what's in each release.
 ## Install
 
 1. Download the latest `Kika-<version>-alpha-universal.zip` from
-   [Releases](https://github.com/Snivik/Sloproom/releases). It runs on Apple Silicon and Intel with macOS 15 or later.
+   [Releases](https://github.com/Snivik/Kika/releases). It runs on Apple Silicon and Intel with macOS 15 or later.
 2. Unzip it and move `Кика.app` to Applications.
 3. The app isn't notarized, so macOS blocks the first launch. Open it once, then choose
    System Settings → Privacy & Security → **Open Anyway**. You can also run this instead:
