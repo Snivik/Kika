@@ -1,4 +1,6 @@
-# Кика
+<p align="center"><img src="docs/logo.png" alt="Кика's icon: a kika headdress drawn in red marker" width="128"></p>
+
+<h1 align="center">Кика</h1>
 
 Кика is pronounced (and transliterated) "Kika". It's named after the [kika](https://ru.wikipedia.org/wiki/%D0%9A%D0%B8%D0%BA%D0%B0_%28%D0%B3%D0%BE%D0%BB%D0%BE%D0%B2%D0%BD%D0%BE%D0%B9_%D1%83%D0%B1%D0%BE%D1%80%29), a horned headdress women wore in old Russia.
 

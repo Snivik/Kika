@@ -3,6 +3,7 @@
 // so every run draws the same icon. 16 and 32 px get a single heavier pass so the shape still reads.
 //
 // usage: swift Tools/icon/make_icon.swift Kika/Assets.xcassets/AppIcon.appiconset
+// The README logo, docs/logo.png, is a copy of icon_256@2x.png; copy it again after changing the icon.
 import AppKit
 
 let outDir = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1]
