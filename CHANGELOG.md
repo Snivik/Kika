@@ -1,9 +1,21 @@
 # Changelog
 
-Sloproom is in alpha. Every push to `main` that adds a new section here becomes a GitHub release:
+Кика is in alpha. Every push to `main` that adds a new section here becomes a GitHub release:
 CI builds the universal app and publishes the top section as its release notes (see README → Releases).
 Fix releases bump the patch (0.1.0 → 0.1.1); significant new features bump the minor (→ 0.2.0).
 Newest first; written for people, not commits.
+
+## 0.3.0 — 2026-10-13
+
+**Sloproom is now Кика**
+- The app has a new name, Кика ("Kika"), after the horned headdress women wore in old Russia, and a new icon:
+  a kika drawn in red marker.
+- To macOS, Кика is a different app from Sloproom, so it starts with an empty catalog and default settings. To
+  bring your photos over, choose File › Export Catalog… in Sloproom, then File › Import Catalog… in Кика, and
+  grant access to your folders and drives again when it asks. After that you can delete Sloproom.
+- Catalog exports are now `.kikacatalog` files and decode profiles `.kikadecode`. Кика still opens
+  `.sloproomcatalog` and `.sloproomdecode` files.
+- The download is now called `Kika-<version>-alpha-universal.zip`.
 
 ## 0.2.0 — 2026-10-12
 
