@@ -4,8 +4,8 @@
 //  GeometryStage vs GeometryMath (synthetic marker image), and real DNG renders.
 //
 //  Build & run:
-//    Tools/harness.sh /private/tmp/claude-501/out-crop/crop_check Tools/crop_check.swift sloproom/Develop/Crop/CropMath.swift \
-//        sloproom/Develop/Crop/Catalog+CropPresets.swift
+//    Tools/harness.sh /private/tmp/claude-501/out-crop/crop_check Tools/crop_check.swift Kika/Develop/Crop/CropMath.swift \
+//        Kika/Develop/Crop/Catalog+CropPresets.swift
 //    /private/tmp/claude-501/out-crop/crop_check [photo-dir] [out-dir]
 //
 //  Reads sample photos READ-ONLY; writes only into out-dir.

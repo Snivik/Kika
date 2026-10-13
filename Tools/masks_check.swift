@@ -6,9 +6,9 @@
 //  compiled in too:
 //
 //    W=<repo>; OUT=/private/tmp/claude-501/out-masks
-//    UI="$W/sloproom/Develop/DevelopSession.swift $W/sloproom/Develop/Masking/UI/MaskInteraction.swift \
-//        $W/sloproom/Develop/Masking/UI/MaskToolState.swift $W/sloproom/Develop/Masking/UI/DevelopSession+Masks.swift \
-//        $W/sloproom/Develop/Crop/DevelopSession+Crop.swift $W/sloproom/Develop/Crop/CropMath.swift $W/sloproom/Develop/Crop/Catalog+CropPresets.swift"
+//    UI="$W/Kika/Develop/DevelopSession.swift $W/Kika/Develop/Masking/UI/MaskInteraction.swift \
+//        $W/Kika/Develop/Masking/UI/MaskToolState.swift $W/Kika/Develop/Masking/UI/DevelopSession+Masks.swift \
+//        $W/Kika/Develop/Crop/DevelopSession+Crop.swift $W/Kika/Develop/Crop/CropMath.swift $W/Kika/Develop/Crop/Catalog+CropPresets.swift"
 //    $W/Tools/harness.sh $OUT/masks_check $W/Tools/masks_check.swift $UI
 //    $OUT/masks_check [dng] [out-dir]
 //

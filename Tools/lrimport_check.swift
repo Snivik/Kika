@@ -4,12 +4,12 @@
 //
 //  Build & run:
 //    Tools/harness.sh /private/tmp/claude-501/out-lrimport/lrimport_check Tools/lrimport_check.swift \
-//      sloproom/LightroomImport/LightroomCatalogReader.swift sloproom/LightroomImport/LightroomImportPlan.swift \
-//      sloproom/LightroomImport/Catalog+LightroomImport.swift sloproom/LightroomImport/RootAccess.swift sloproom/App/FolderTree.swift
+//      Kika/LightroomImport/LightroomCatalogReader.swift Kika/LightroomImport/LightroomImportPlan.swift \
+//      Kika/LightroomImport/Catalog+LightroomImport.swift Kika/LightroomImport/RootAccess.swift Kika/App/FolderTree.swift
 //    /private/tmp/claude-501/out-lrimport/lrimport_check <catalog.lrcat> [out-dir]
 //
 //  Copies the .lrcat into out-dir (never opens the original), imports it into a fresh temp
-//  Sloproom catalog, prints counts / the folder tree / timings, then imports AGAIN and checks
+//  Кика catalog, prints counts / the folder tree / timings, then imports AGAIN and checks
 //  that nothing was duplicated.
 //
 
@@ -129,7 +129,7 @@ struct LightroomImportCheck {
             check(order == first.photoIDs, "folder order matches Lightroom order (\(first.name))")
         }
 
-        // MARK: Import #2 (idempotency) — also flip a Sloproom-side flag to prove it survives.
+        // MARK: Import #2 (idempotency) — also flip a Кика-side flag to prove it survives.
         print("\nImport #2 (same catalog, same options)")
         let someID = try catalog.db.scalarInt("SELECT id FROM photos WHERE flag = 0 LIMIT 1") ?? 0
         try catalog.setFlag(.reject, for: [someID])
@@ -141,7 +141,7 @@ struct LightroomImportCheck {
         check(try catalog.allFolders().count == folderCount1, "folder count unchanged")
         check(try catalog.db.scalarInt("SELECT COUNT(*) FROM folder_photos") == memberships1, "membership count unchanged")
         check(try catalog.db.scalarInt("SELECT COUNT(*) FROM (SELECT lr_collection_id FROM folders GROUP BY 1 HAVING COUNT(*) > 1)") == 0, "no duplicate lr_collection_id")
-        check(try catalog.photo(id: someID)?.flag == .reject, "Sloproom-side flag kept on re-import")
+        check(try catalog.photo(id: someID)?.flag == .reject, "Кика-side flag kept on re-import")
         check(try catalog.allRoots().count == snapshot.roots.count, "roots not duplicated")
 
         // Re-import at top level after the user moved a folder: still no duplicates.

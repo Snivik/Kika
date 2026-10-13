@@ -41,23 +41,23 @@ Never build with the sandbox disabled (no `ENABLE_APP_SANDBOX=NO` overrides). In
 catalog AND the test photos inside the app's own container, which the sandboxed app can read/write:
 
 ```sh
-C=~/Library/Containers/dev.snivik.sloproom/Data/tmp/<you>   # your private dir inside the container
+C=~/Library/Containers/dev.snivik.kika/Data/tmp/<you>   # your private dir inside the container
 mkdir -p $C/photos && cp /Users/snivik/Pictures/2026/2026-08-01/L10902{28,29,30}.DNG $C/photos/   # COPY, never move
 Tools/harness.sh /private/tmp/claude-501/<you>/populate_catalog Tools/populate_catalog.swift
 /private/tmp/claude-501/<you>/populate_catalog $C/cat $C/photos
 
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project sloproom.xcodeproj \
-  -scheme sloproom -configuration Debug -derivedDataPath /private/tmp/claude-501/dd-<you> build
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Kika.xcodeproj \
+  -scheme Kika -configuration Debug -derivedDataPath /private/tmp/claude-501/dd-<you> build
 
-SLOPROOM_CATALOG_DIR=$C/cat \
-SLOPROOM_DEV_SCRIPT="wait 3; snapshot $C/lib.png; select 0; mode develop; wait 4; exposure 1; wait 2; snapshot $C/dev.png; quit" \
-  /private/tmp/claude-501/dd-<you>/Build/Products/Debug/Sloproom.app/Contents/MacOS/Sloproom &
+KIKA_CATALOG_DIR=$C/cat \
+KIKA_DEV_SCRIPT="wait 3; snapshot $C/lib.png; select 0; mode develop; wait 4; exposure 1; wait 2; snapshot $C/dev.png; quit" \
+  /private/tmp/claude-501/dd-<you>/Build/Products/Debug/Кика.app/Contents/MacOS/Кика &
 ```
 (no `timeout` binary on macOS: background it and kill it after ~60s if it hasn't quit.)
 Snapshots must also be written inside the container. View them with the Read tool.
 
-- `SLOPROOM_CATALOG_DIR` overrides the catalog location (any build).
-- `SLOPROOM_DEV_SCRIPT` (DEBUG builds; see `App/DevTools.swift` → `DevScript`) drives the UI and
+- `KIKA_CATALOG_DIR` overrides the catalog location (any build).
+- `KIKA_DEV_SCRIPT` (DEBUG builds; see `App/DevTools.swift` → `DevScript`) drives the UI and
   takes window snapshots without screen-recording permission. Commands:
   `wait <s>`, `snapshot <png>`, `mode library|develop`, `select <index>`, `source all|last|<folder name>`,
   `flag pick|none|reject`, `exposure <ev>`, `tool none|crop|mask`, `straighten <deg>`, `aspect <w>:<h>|original`, `rotate left|right`,
@@ -103,7 +103,7 @@ Snapshots must also be written inside the container. View them with the Read too
   cursor change with its call stack to `<container>/Data/tmp/cursor-trace.log` (cursor bugs need a real mouse).
   Decode profiles (`Develop/Decode/UI/DecodeDevScript.swift`): `decode expand`, `decode set <param> <v|nil>`,
   `decode profile <name>|none`, `decode default <name>|none`, `decode camera <name>|none`, `decode fit [n]` (Match Camera JPEG on n photos), `decode makes [dump]` (Fill In Camera Makes sheet, Settings open), `decode settings`
-  (selects the tab; then `menu Sloproom/Settings…` + `snapwin <png>`), `decode dump`.
+  (selects the tab; then `menu Кика/Settings…` + `snapwin <png>`), `decode dump`.
   Develop latency / preview caches (`Previews/UI/RecentRendersDevScript.swift`): `rr time next|prev|<index>`
   (ms until first image / sharp image / source loaded / final render), `rr stats`, `rr reset`, `rr dump`,
   `rr sheet` / `rr closesheet` (preview settings sheet), `rr limit <n>|reset`, `rr clean`.
@@ -114,7 +114,7 @@ Snapshots must also be written inside the container. View them with the Read too
   `activate; selectall; export sheet; export dest $C/out; export quality 70; export run; export wait; export snapshot $C/sheet.png; export close; quit`.
   Catalog transfer (`CatalogTransfer/CatalogTransferDevScript.swift`): `catalog export <file> | inspect <file> |
   replace | close | snapshot <png> | dump | roots | relink <old root path> => <new folder> | menustate`, e.g.
-  `catalog export $C/out/x.sloproomcatalog; catalog close; catalog inspect $C/out/x.sloproomcatalog; catalog snapshot $C/summary.png; catalog replace; catalog snapshot $C/done.png; catalog close; catalog dump`.
+  `catalog export $C/out/x.kikacatalog; catalog close; catalog inspect $C/out/x.kikacatalog; catalog snapshot $C/summary.png; catalog replace; catalog snapshot $C/done.png; catalog close; catalog dump`.
   Keyboard shortcuts / tooltips (`Shortcuts/ShortcutsDevScript.swift`): `shortcut set <action id> <spec>`
   (e.g. `shortcut set pick k`, `shortcut set exportPhotos none`), `shortcut record <id> <spec>` (as typed into
   Settings > Keyboard: a conflict becomes a pending "Already used by …"), `shortcut confirm|cancel`,
@@ -159,7 +159,7 @@ under the out dir). Copies sample pairs into a fake card first (any folder of DN
 
 ```sh
 Tools/harness.sh /private/tmp/claude-501/out-sdimport/sdimport_check Tools/sdimport_check.swift \
-  sloproom/Import/ImportEngine.swift sloproom/Import/Catalog+Import.swift
+  Kika/Import/ImportEngine.swift Kika/Import/Catalog+Import.swift
 /private/tmp/claude-501/out-sdimport/sdimport_check [sample-dir] [out-dir]
 ```
 
@@ -191,23 +191,23 @@ Build from the repo root (engine default set + the extra files listed), run, exp
 | Harness | Extra files | Run args |
 |---|---|---|
 | `foundation_check` | – | `[photo-dir] [out-dir]` |
-| `lrimport_check` | `sloproom/LightroomImport/{LightroomCatalogReader,LightroomImportPlan,Catalog+LightroomImport,RootAccess}.swift sloproom/App/FolderTree.swift` | `<catalog.lrcat> [out-dir]` (a COPY of the owner's catalog) |
-| `sdimport_check` | `sloproom/Import/ImportEngine.swift sloproom/Import/Catalog+Import.swift` | `[sample-dir] [out-dir]` |
-| `folders_check` | `sloproom/App/FolderTree.swift sloproom/Library/Sidebar/{Catalog+FolderManagement,FolderDragPayload}.swift` | `[out-dir]` (folder tree, moves, cycles, …; Dates: capture month counts, year / month / undated sources) |
+| `lrimport_check` | `Kika/LightroomImport/{LightroomCatalogReader,LightroomImportPlan,Catalog+LightroomImport,RootAccess}.swift Kika/App/FolderTree.swift` | `<catalog.lrcat> [out-dir]` (a COPY of the owner's catalog) |
+| `sdimport_check` | `Kika/Import/ImportEngine.swift Kika/Import/Catalog+Import.swift` | `[sample-dir] [out-dir]` |
+| `folders_check` | `Kika/App/FolderTree.swift Kika/Library/Sidebar/{Catalog+FolderManagement,FolderDragPayload}.swift` | `[out-dir]` (folder tree, moves, cycles, …; Dates: capture month counts, year / month / undated sources) |
 | `previews_check` | – | `[photo-dir] [out-dir]` |
 | `develop_check` | – | `[dng] [out-dir] [only-name-substring]` |
-| `masks_check` | `sloproom/Develop/DevelopSession.swift sloproom/Develop/Masking/UI/{MaskInteraction,MaskToolState,DevelopSession+Masks}.swift sloproom/Develop/Crop/{DevelopSession+Crop,CropMath,Catalog+CropPresets}.swift` | `[dng] [out-dir]` |
-| `crop_check` | `sloproom/Develop/Crop/CropMath.swift sloproom/Develop/Crop/Catalog+CropPresets.swift` | `[photo-dir] [out-dir]` |
-| `zoom_check` | `sloproom/Develop/Zoom/RegionRenderer.swift` | `[dng]` (viewport math incl. free pinch levels, steps from them, pinch anchor held over 20 steps; region render == full render, 1:1 timings) |
-| `catalog_transfer_check` | `sloproom/CatalogTransfer/CatalogTransfer.swift sloproom/LightroomImport/RootAccess.swift` | `[catalog-dir to COPY] [out-dir]` (default: the realistic catalog copy `…/Data/tmp/catalog/pristine`, `/private/tmp/claude-501/catalog-out/run`) |
+| `masks_check` | `Kika/Develop/DevelopSession.swift Kika/Develop/Masking/UI/{MaskInteraction,MaskToolState,DevelopSession+Masks}.swift Kika/Develop/Crop/{DevelopSession+Crop,CropMath,Catalog+CropPresets}.swift` | `[dng] [out-dir]` |
+| `crop_check` | `Kika/Develop/Crop/CropMath.swift Kika/Develop/Crop/Catalog+CropPresets.swift` | `[photo-dir] [out-dir]` |
+| `zoom_check` | `Kika/Develop/Zoom/RegionRenderer.swift` | `[dng]` (viewport math incl. free pinch levels, steps from them, pinch anchor held over 20 steps; region render == full render, 1:1 timings) |
+| `catalog_transfer_check` | `Kika/CatalogTransfer/CatalogTransfer.swift Kika/LightroomImport/RootAccess.swift` | `[catalog-dir to COPY] [out-dir]` (default: the realistic catalog copy `…/Data/tmp/catalog/pristine`, `/private/tmp/claude-501/catalog-out/run`) |
 | `recentrenders_check` | – | `[dng] [out-dir]` (RecentRenders store/lookup/eviction/stale/purge, Clean Cache, JPEG vs HEIC timings) |
 | `lrmatch_check` | – | `[dng] [tuning-dir] [label] [sliders] [nocrop]` or `fit <spec> [evals]` (sliders vs Lightroom exports, see above) |
-| `export_check` | `sloproom/Export/ExportEngine.swift sloproom/Develop/Crop/CropMath.swift` | `[photo-dir] [out-dir]` (default `/private/tmp/claude-501/out-export`; `look/` = downscaled exports + Develop renders) |
-| `shortcuts_check` | `HARNESS_NO_DEFAULT=1`, `sloproom/Shortcuts/ShortcutModel.swift sloproom/Shortcuts/ShortcutStore.swift` | – (defaults, overrides persist, conflicts per scope, resolution, reset, formatting; own UserDefaults suite) |
-| `vcopies_check` | `sloproom/VirtualCopies/{Catalog+VirtualCopies,VirtualCopyPreviews}.swift sloproom/Import/Catalog+Import.swift sloproom/LightroomImport/{RootAccess,LightroomCatalogReader,LightroomImportPlan,Catalog+LightroomImport}.swift sloproom/Export/ExportEngine.swift sloproom/Develop/Crop/CropMath.swift` | `[realistic catalog dir to COPY] [sample.jpg] [out-dir]` (defaults: `…/Data/tmp/vcopies/pristine`, `…/Data/tmp/folders/photos/L1090230.JPG`; schema v2 migration of a fresh v1 + the realistic copy, copies, sorting, import dedupe, relink, removal, preview seeding, export names) |
-| `decode_check` | `sloproom/Actions/EditSections.swift` | `[raw] [out-dir]` (default `/Volumes/T9/Lightroom/2026/2026-10-11/P1033881.RW2`, the sunset portrait; decode JSON, seeded profiles, layering + provenance, edit_version invalidation per camera / global / chosen profile, delete clears references, import / export, Recent renders hash; renders: old vs new clip fade on the face, boost 0, knob reset on the shared filter, decoder pin + fallback, camera default; make-less (Lightroom) cameras: identity, gaps, fallback default, fill + default move; Match Camera JPEG sampling (spread, extremes left out, determinism) and on the RAW + 3 neighbours: never worse, bounds, exposure checks, monochrome-style outlier, cancel) |
-| `tags_check` | `sloproom/App/FolderTree.swift` | `[out-dir]` (tag definitions, per-author values, effective value / to-review filters incl. folders + subfolders, confirm suggestions, value-list edits, folder tags, sidebar folder filter (matches + ancestors, effective values, To Review, name), cascades; no photos needed, runs in CI) |
-| `actions_check` | `sloproom/Actions/{PhotoActionSpec,EditSections,BulkCrop,Catalog+BulkEdits}.swift sloproom/Shortcuts/ShortcutModel.swift sloproom/Develop/Crop/{CropMath,Catalog+CropPresets}.swift` | `[out-dir]` (registry arity / modes / enablement / shortcut titles + no default-key conflicts, target resolution, Bulk Crop math for every preset × orientation × portrait / landscape / square / rotated / straightened / flipped / EXIF-rotated photo, Paste / Sync section masking, bulk apply + one-step undo / redo on a temp catalog, 2,000-photo timing) |
+| `export_check` | `Kika/Export/ExportEngine.swift Kika/Develop/Crop/CropMath.swift` | `[photo-dir] [out-dir]` (default `/private/tmp/claude-501/out-export`; `look/` = downscaled exports + Develop renders) |
+| `shortcuts_check` | `HARNESS_NO_DEFAULT=1`, `Kika/Shortcuts/ShortcutModel.swift Kika/Shortcuts/ShortcutStore.swift` | – (defaults, overrides persist, conflicts per scope, resolution, reset, formatting; own UserDefaults suite) |
+| `vcopies_check` | `Kika/VirtualCopies/{Catalog+VirtualCopies,VirtualCopyPreviews}.swift Kika/Import/Catalog+Import.swift Kika/LightroomImport/{RootAccess,LightroomCatalogReader,LightroomImportPlan,Catalog+LightroomImport}.swift Kika/Export/ExportEngine.swift Kika/Develop/Crop/CropMath.swift` | `[realistic catalog dir to COPY] [sample.jpg] [out-dir]` (defaults: `…/Data/tmp/vcopies/pristine`, `…/Data/tmp/folders/photos/L1090230.JPG`; schema v2 migration of a fresh v1 + the realistic copy, copies, sorting, import dedupe, relink, removal, preview seeding, export names) |
+| `decode_check` | `Kika/Actions/EditSections.swift` | `[raw] [out-dir]` (default `/Volumes/T9/Lightroom/2026/2026-10-11/P1033881.RW2`, the sunset portrait; decode JSON, seeded profiles, layering + provenance, edit_version invalidation per camera / global / chosen profile, delete clears references, import / export, Recent renders hash; renders: old vs new clip fade on the face, boost 0, knob reset on the shared filter, decoder pin + fallback, camera default; make-less (Lightroom) cameras: identity, gaps, fallback default, fill + default move; Match Camera JPEG sampling (spread, extremes left out, determinism) and on the RAW + 3 neighbours: never worse, bounds, exposure checks, monochrome-style outlier, cancel) |
+| `tags_check` | `Kika/App/FolderTree.swift` | `[out-dir]` (tag definitions, per-author values, effective value / to-review filters incl. folders + subfolders, confirm suggestions, value-list edits, folder tags, sidebar folder filter (matches + ancestors, effective values, To Review, name), cascades; no photos needed, runs in CI) |
+| `actions_check` | `Kika/Actions/{PhotoActionSpec,EditSections,BulkCrop,Catalog+BulkEdits}.swift Kika/Shortcuts/ShortcutModel.swift Kika/Develop/Crop/{CropMath,Catalog+CropPresets}.swift` | `[out-dir]` (registry arity / modes / enablement / shortcut titles + no default-key conflicts, target resolution, Bulk Crop math for every preset × orientation × portrait / landscape / square / rotated / straightened / flipped / EXIF-rotated photo, Paste / Sync section masking, bulk apply + one-step undo / redo on a temp catalog, 2,000-photo timing) |
 
 ## lrmatch_check.swift (Develop sliders vs Lightroom)
 
@@ -216,7 +216,7 @@ folder). References are downscaled copies made ONCE with `sips` from the owner's
 `~/Pictures/Lightroom Tuning/<Slider>/L1100118_<value>.jpg` (read-only; never re-read the 40 MB originals):
 
 ```sh
-T=~/Library/Containers/dev.snivik.sloproom/Data/tmp/tuning
+T=~/Library/Containers/dev.snivik.kika/Data/tmp/tuning
 sips -Z 1600 -s formatOptions 90 <export> --out $T/ref/<Slider>/<value>.jpg          # whole image
 sips -c 1067 1600 -s formatOptions 92 <export> --out $T/ref100/<Slider>/<value>.jpg  # 1:1 center crop
 sips -c 1067 1600 --cropOffset 1177 2615 -s formatOptions 92 <export> --out $T/refhl/Highlights/<value>.jpg  # 1:1 bright metal
@@ -252,5 +252,5 @@ xcrun swiftc -O Tools/ax_help_audit.swift -o /private/tmp/claude-501/<you>/ax_he
 ```
 Skips AppKit chrome it can't annotate (window buttons, scroll bars, List outline disclosure triangles).
 
-e.g. `Tools/harness.sh /private/tmp/claude-501/<you>/crop_check Tools/crop_check.swift sloproom/Develop/Crop/CropMath.swift sloproom/Develop/Crop/Catalog+CropPresets.swift`
+e.g. `Tools/harness.sh /private/tmp/claude-501/<you>/crop_check Tools/crop_check.swift Kika/Develop/Crop/CropMath.swift Kika/Develop/Crop/Catalog+CropPresets.swift`
 (the harnesses compile in parallel fine; ~1–3 min each with `-O`).

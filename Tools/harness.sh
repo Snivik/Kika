@@ -23,7 +23,7 @@ fi
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="$1"; MAIN="$2"; shift 2
-APP="$REPO/sloproom"
+APP="$REPO/Kika"
 
 ENGINE_FILES=(
   "$APP"/Catalog/*.swift
@@ -70,6 +70,6 @@ exec xcrun swiftc "${HARNESS_OPT:--O}" \
   -enable-upcoming-feature InferSendableFromCaptures \
   -enable-upcoming-feature NonisolatedNonsendingByDefault \
   -target arm64-apple-macosx26.0 \
-  -module-name SloproomHarness \
+  -module-name KikaHarness \
   -o "$OUT" \
   "${UNIQUE[@]}"

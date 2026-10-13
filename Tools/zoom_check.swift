@@ -4,7 +4,7 @@
 //  CanvasGeometry round trips on a zoomed rect) and RegionRenderer (a region render matches the
 //  same pixels of a full render at that scale, incl. crop + local operations) + timings.
 //
-//  Tools/harness.sh /private/tmp/claude-501/zoom-out/zoom_check Tools/zoom_check.swift sloproom/Develop/Zoom/RegionRenderer.swift
+//  Tools/harness.sh /private/tmp/claude-501/zoom-out/zoom_check Tools/zoom_check.swift Kika/Develop/Zoom/RegionRenderer.swift
 //  /private/tmp/claude-501/zoom-out/zoom_check [dng]
 //
 

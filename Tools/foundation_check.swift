@@ -75,13 +75,13 @@ struct FoundationCheck {
             check(Catalog.normalizedPath("/private/tmp/a/") == "/tmp/a" && Catalog.normalizedPath("/tmp/a/../b") == "/tmp/b"
                   && Catalog.normalizedPath("/private/var/x") == "/var/x" && Catalog.normalizedPath("/Volumes/T9/") == "/Volumes/T9",
                   "normalizedPath strips /private, .., trailing slash")
-            let early = try pc.insertPhoto(Photo(path: "/private/tmp/sloproom-norm/card/A.DNG"))
-            let r = try pc.upsertRoot(path: "/private/tmp/sloproom-norm/card/", bookmark: nil)
-            check(try pc.root(id: r)?.path == "/tmp/sloproom-norm/card", "root stored normalized")
+            let early = try pc.insertPhoto(Photo(path: "/private/tmp/kika-norm/card/A.DNG"))
+            let r = try pc.upsertRoot(path: "/private/tmp/kika-norm/card/", bookmark: nil)
+            check(try pc.root(id: r)?.path == "/tmp/kika-norm/card", "root stored normalized")
             check(try pc.photo(id: early)?.rootID == r, "upsertRoot attaches /private/… photo to normalized root")
-            let late = try pc.insertPhoto(Photo(path: "/private/tmp/sloproom-norm/card/sub/B.DNG"))
+            let late = try pc.insertPhoto(Photo(path: "/private/tmp/kika-norm/card/sub/B.DNG"))
             check(try pc.photo(id: late)?.rootID == r, "insertPhoto attaches /private/… photo to normalized root")
-            check(try pc.root(for: "/tmp/sloproom-norm/card/C.DNG")?.id == r && pc.root(for: "/tmp/sloproom-normX/C.DNG") == nil,
+            check(try pc.root(for: "/tmp/kika-norm/card/C.DNG")?.id == r && pc.root(for: "/tmp/kika-normX/C.DNG") == nil,
                   "root(for:) matches either spelling, not sibling prefixes")
         }
 

@@ -1,12 +1,13 @@
 #!/bin/bash
 #
-# Builds a universal (arm64 + x86_64) Release Sloproom.app and zips it.
+# Builds a universal (arm64 + x86_64) Release Кика.app and zips it.
 # Used by .github/workflows/ci.yml; works the same locally.
 #
 # Usage:
 #   Tools/build_release.sh <version> [out-dir]
 #     version   CFBundleShortVersionString, e.g. 0.3.0 (the top CHANGELOG.md section)
-#     out-dir   default build/<version>; gets Sloproom.app + Sloproom-<version>-alpha-universal.zip
+#     out-dir   default build/<version>; gets Кика.app + Kika-<version>-alpha-universal.zip
+#               (the zip name stays ASCII: GitHub strips non-ASCII from release asset names)
 #
 # Env:
 #   SIGN_IDENTITY   unset = the project's own signing (Automatic, the owner's Apple Development cert);
@@ -33,24 +34,25 @@ if [ -n "${SIGN_IDENTITY+x}" ]; then
   fi
 fi
 
-xcodebuild -project "$REPO/sloproom.xcodeproj" -scheme sloproom -configuration Release \
+xcodebuild -project "$REPO/Kika.xcodeproj" -scheme Kika -configuration Release \
   -derivedDataPath "$DERIVED_DATA" -destination 'generic/platform=macOS' \
   ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO \
   MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
   ${SIGNING[@]+"${SIGNING[@]}"} \
   build
 
-APP="$DERIVED_DATA/Build/Products/Release/Sloproom.app"
+NAME="Кика"   # PRODUCT_NAME: Кика.app, executable Кика
+APP="$DERIVED_DATA/Build/Products/Release/$NAME.app"
 codesign --verify --deep --strict "$APP"
-archs="$(lipo -archs "$APP/Contents/MacOS/Sloproom")"
+archs="$(lipo -archs "$APP/Contents/MacOS/$NAME")"
 case "$archs" in *arm64*x86_64*|*x86_64*arm64*) ;; *) echo "not universal: $archs" >&2; exit 1 ;; esac
 
 mkdir -p "$OUT"
-ZIP="$OUT/Sloproom-$VERSION-alpha-universal.zip"
-if [ -e "$OUT/Sloproom.app" ] || [ -e "$ZIP" ]; then
+ZIP="$OUT/Kika-$VERSION-alpha-universal.zip"
+if [ -e "$OUT/$NAME.app" ] || [ -e "$ZIP" ]; then
   echo "$OUT already has a build; remove it first" >&2
   exit 1
 fi
-ditto "$APP" "$OUT/Sloproom.app"
-ditto -c -k --keepParent "$OUT/Sloproom.app" "$ZIP"
+ditto "$APP" "$OUT/$NAME.app"
+ditto -c -k --keepParent "$OUT/$NAME.app" "$ZIP"
 echo "Built $VERSION ($BUILD_NUMBER, $archs): $ZIP"

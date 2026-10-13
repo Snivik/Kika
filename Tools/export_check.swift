@@ -1,12 +1,12 @@
 //
 //  export_check.swift
-//  Headless checks for JPEG export (sloproom/Export/ExportEngine.swift): full-resolution renders
+//  Headless checks for JPEG export (Kika/Export/ExportEngine.swift): full-resolution renders
 //  with edits baked in, file naming + collision suffixes, pixel size vs GeometryMath, sRGB,
 //  Orientation 1, metadata kept, quality → size, offline skip, cancel (no temp files), write probe.
 //
 //  Build & run:
 //    Tools/harness.sh /private/tmp/claude-501/out-export/export_check Tools/export_check.swift \
-//        sloproom/Export/ExportEngine.swift sloproom/Develop/Crop/CropMath.swift
+//        Kika/Export/ExportEngine.swift Kika/Develop/Crop/CropMath.swift
 //    /private/tmp/claude-501/out-export/export_check [photo-dir] [out-dir]
 //
 //  Reads sample photos READ-ONLY (the catalog references them in place); writes only into out-dir.
@@ -181,7 +181,7 @@ struct ExportCheck {
         defer { chmod(ro.path, 0o755) }
         var message = ""
         do { try ExportFiles.checkWriteAccess(ro); } catch { message = "\(error)" }
-        check(message == "Sloproom doesn't have write access to “\(ro.path)”. Enable User Selected File: Read/Write in Signing & Capabilities.",
+        check(message == "Кика doesn't have write access to “\(ro.path)”. Enable User Selected File: Read/Write in Signing & Capabilities.",
               "read-only folder → \(message)")
         let roJob = runJob(catalog, [a], ro, quality: 85)
         check(roJob.exported.isEmpty && roJob.stopError != nil, "export to a read-only folder stops with the message")

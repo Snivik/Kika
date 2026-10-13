@@ -1,7 +1,7 @@
 //
 //  populate_catalog.swift
 //  Creates/extends a catalog from a folder of photos (in place, no copying), plus a few demo
-//  folders. Use with the sandboxed dev build + SLOPROOM_CATALOG_DIR inside the app container (see Tools/README.md).
+//  folders. Use with the sandboxed dev build + KIKA_CATALOG_DIR inside the app container (see Tools/README.md).
 //
 //    Tools/harness.sh /private/tmp/claude-501/foundation-out/populate_catalog Tools/populate_catalog.swift
 //    /private/tmp/claude-501/foundation-out/populate_catalog <catalog-dir> <photo-dir> [max-count]

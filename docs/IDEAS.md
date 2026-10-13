@@ -58,5 +58,5 @@ mosaic for things `CIRAWFilter` can't do, e.g. pixel-shift merging or joint demo
   decode and tone steps.
 
 **How to evaluate before starting.** Compare 100% crops of fine textures (knitwear, foliage, fences) and
-a high-ISO file in Sloproom (Apple), LightCraft and Lightroom. Reference portrait:
+a high-ISO file in Кика (Apple), LightCraft and Lightroom. Reference portrait:
 `/Volumes/T9/Lightroom/2026/2026-10-11/P1033881.RW2`.

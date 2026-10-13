@@ -8,9 +8,9 @@
 //
 //  Build & run:
 //    Tools/harness.sh /private/tmp/claude-501/actions-out/actions_check Tools/actions_check.swift \
-//      sloproom/Actions/PhotoActionSpec.swift sloproom/Actions/EditSections.swift sloproom/Actions/BulkCrop.swift \
-//      sloproom/Actions/Catalog+BulkEdits.swift sloproom/Shortcuts/ShortcutModel.swift \
-//      sloproom/Develop/Crop/CropMath.swift sloproom/Develop/Crop/Catalog+CropPresets.swift
+//      Kika/Actions/PhotoActionSpec.swift Kika/Actions/EditSections.swift Kika/Actions/BulkCrop.swift \
+//      Kika/Actions/Catalog+BulkEdits.swift Kika/Shortcuts/ShortcutModel.swift \
+//      Kika/Develop/Crop/CropMath.swift Kika/Develop/Crop/Catalog+CropPresets.swift
 //    /private/tmp/claude-501/actions-out/actions_check [out-dir]
 //
 

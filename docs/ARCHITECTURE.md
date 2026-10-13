@@ -1,4 +1,4 @@
-# Sloproom architecture
+# Кика architecture
 
 Personal Lightroom-Classic-like photo app. SwiftUI, macOS 26, Apple Silicon, no third-party deps.
 This document describes the merged system (foundation + import, Lightroom import, folders/flags,
@@ -8,12 +8,12 @@ same commit.
 ## Build
 
 ```sh
-DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project sloproom.xcodeproj \
-  -scheme sloproom -configuration Debug -derivedDataPath /private/tmp/claude-501/dd-<you> build \
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Kika.xcodeproj \
+  -scheme Kika -configuration Debug -derivedDataPath /private/tmp/claude-501/dd-<you> build \
   2>&1 | grep -E "error|warning: |BUILD" | head -50
 ```
 
-- Files under `sloproom/` are auto-included (file-system synchronized groups). Never edit `project.pbxproj`.
+- Files under `Kika/` are auto-included (file-system synchronized groups). Never edit `project.pbxproj`.
 - Swift 5 mode, `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`, approachable concurrency,
   `MemberImportVisibility` (every file imports what it uses: `Foundation`, `CoreGraphics`, `CoreImage`, …).
 - Anything that runs off-main (engine, services, value types) is declared `nonisolated`
@@ -24,14 +24,14 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project slo
   every cursor change). Transient drag feedback clears on mouse-up, not only on exit callbacks.
 - App Sandbox ON, user-selected files READ-ONLY (owner will switch to read/write). Don't change entitlements.
 - Headless tests: see `Tools/README.md` (`Tools/harness.sh`, `Tools/foundation_check.swift`,
-  sandboxed UI runs with `SLOPROOM_CATALOG_DIR` + `SLOPROOM_DEV_SCRIPT` snapshots, catalog + photos inside the app container. NEVER build with the sandbox disabled).
+  sandboxed UI runs with `KIKA_CATALOG_DIR` + `KIKA_DEV_SCRIPT` snapshots, catalog + photos inside the app container. NEVER build with the sandbox disabled).
 
 ## Module map
 
 | Path | What |
 |---|---|
-| `App/sloproomApp.swift` | scene: main `Window` (+ `SloproomCommands`, `PreviewCommands`, …), `Settings` (`SettingsRootView`: tabs Previews, Drives, Raw Decode, Keyboard) |
-| `App/AppModel.swift`, `FolderTree.swift`, `SloproomCommands.swift` | app state, folder tree, menu bar (+ `TextInputGuard`) |
+| `App/KikaApp.swift` | scene: main `Window` (+ `KikaCommands`, `PreviewCommands`, …), `Settings` (`SettingsRootView`: tabs Previews, Drives, Raw Decode, Keyboard) |
+| `App/AppModel.swift`, `FolderTree.swift`, `KikaCommands.swift` | app state, folder tree, menu bar (+ `TextInputGuard`) |
 | `App/DevTools.swift`, `App/IntegrationDevScript.swift` | "Add Folder in Place (Dev)", `DevScript` (DEBUG UI scripting); feature DevScript files live next to their feature |
 | `Catalog/*` | SQLite wrapper, catalog open/migrate, photos / folders / roots / crop-preset API, models, security scope |
 | `Tags/*` | tags on photos and folders: models, catalog API + filter SQL (engine); `Tags/UI/`: store, sidebar section, filter menu + chips, Develop panel, editor, DevScript `tag …` |
@@ -65,8 +65,8 @@ a harness compiles) import no SwiftUI/AppKit and mark types `nonisolated`.
 
 - **Owner decision (frozen): edits live ONLY in the catalog — no XMP / sidecar files are ever
   written. Portability between Macs is File > Export Catalog… / Import Catalog… (see below).**
-- Location: `Catalog.defaultDirectory` = `<Application Support>/Sloproom` (inside the container when
-  sandboxed; `SLOPROOM_CATALOG_DIR` env overrides). `catalogDirectory` holds `Catalog.sqlite`;
+- Location: `Catalog.defaultDirectory` = `<Application Support>/Kika` (inside the container when
+  sandboxed; `KIKA_CATALOG_DIR` env overrides). `catalogDirectory` holds `Catalog.sqlite`;
   `cacheDirectory("Previews")` returns/creates a subdirectory for caches.
 - Open: `Catalog.openDefault()`, `Catalog.open(at: URL)` (harnesses: temp dir).
 - Schema: `PRAGMA user_version` migrations in `Catalog.migrations` (append-only, foundation-owned);
@@ -211,15 +211,15 @@ Your own extension methods should call `postChange(_:)` too. `AppModel` coalesce
 
 - **Export** (`CatalogTransfer.exportCatalog(_:to:appVersion:appBuild:sourceMac:)`, off-main):
   `VACUUM INTO <catalogDir>/Transfer/export-<uuid>.sqlite` (consistent while the app writes), then
-  in the SNAPSHOT only: table `catalog_info(key, value)` (`format`, `format_version` =
+  in the SNAPSHOT only: table `catalog_info(key, value)` (`format` = `kika.catalog`, `format_version` =
   `CatalogTransfer.formatVersion` (1), `app_version`, `app_build`, `schema_version`, `exported_at` (ISO
   8601) + `exported_at_unix`, `source_mac` (`Host.current().localizedName`), `export_id`, `photo_count`,
   `edited_photo_count`, `folder_count`, `root_count`), `journal_mode=DELETE` (one self-contained file),
   `integrity_check` + `foreign_key_check`, then placed at the destination: safe-save via an item
   replacement directory, else hidden sibling + `rename`, else a direct write (a sandboxed save-panel
-  grant may cover only the chosen file). Default name `Sloproom Catalog YYYY-MM-DD.sloproomcatalog`.
+  grant may cover only the chosen file). Default name `Кика Catalog YYYY-MM-DD.kikacatalog`.
   Previews are NOT included. Pending Develop edits are flushed first (`DevelopSession.flushPendingSaves()`).
-- **Import** (`stageImport(from:stagingDirectory:)`): copies the picked `.sloproomcatalog` / `Catalog.sqlite`
+- **Import** (`stageImport(from:stagingDirectory:)`): copies the picked `.kikacatalog` (or pre-rename `.sloproomcatalog`) / `Catalog.sqlite`
   (+ its `-wal` if readable; warning otherwise) into `<catalogDir>/Transfer/`, never opens it in place.
   `validate`: required tables (`photos folders folder_photos roots applied_migrations`), photos columns,
   `user_version` 1…`Catalog.schemaVersion` (newer → `.newerSchema`, clear message), `format_version` ≤ 1,
@@ -285,7 +285,7 @@ Injected with `.environment(model)`; views use `@Environment(AppModel.self)`.
   the Picked filter, removed…) hands focus (and the selection, if it emptied) to the next remaining
   photo of the old list, or the previous one if it was last. Source / filter / sort changes don't.
 
-Menus (`SloproomCommands` + `PreviewCommands` + `ExportCommands` + `CatalogTransferCommands`): File > New Folder, Import Photos…,
+Menus (`KikaCommands` + `PreviewCommands` + `ExportCommands` + `CatalogTransferCommands`): File > New Folder, Import Photos…,
 Import Lightroom Catalog…, Add Folder in Place (Dev)…, Export…, Export Catalog…, Import Catalog…; Edit > Undo/Redo
 (`BulkEditUndo.undo/redo(model:)`: Develop session steps and bulk-edit steps newest first, otherwise the responder chain);
 Edit > Select All Photos; Photo menu = the photo actions registry (`PhotoMenuBarItems`: Pick, Unflag, Reject, Auto Advance After Flagging,
@@ -349,15 +349,15 @@ View / Help > Keyboard Shortcuts…). Never hard-code a key in a handler or a to
 
 | Action (id) | Default | Scope | Handler (file) |
 |---|---|---|---|
-| New Folder (`newFolder`), Import Photos… (`importPhotos`), Export… (`exportPhotos`) | ⇧⌘N, ⇧⌘I, ⇧⌘E | Everywhere | menu (`SloproomCommands`, `ExportCommands`) |
-| Import Lightroom Catalog…, Export Catalog…, Import Catalog…, Auto Advance After Flagging, Keyboard Shortcuts… | none (assignable) | Everywhere | menu (`SloproomCommands`, `CatalogTransferSheet`, `FlagActions`, `KeyboardSettingsView`) |
+| New Folder (`newFolder`), Import Photos… (`importPhotos`), Export… (`exportPhotos`) | ⇧⌘N, ⇧⌘I, ⇧⌘E | Everywhere | menu (`KikaCommands`, `ExportCommands`) |
+| Import Lightroom Catalog…, Export Catalog…, Import Catalog…, Auto Advance After Flagging, Keyboard Shortcuts… | none (assignable) | Everywhere | menu (`KikaCommands`, `CatalogTransferSheet`, `FlagActions`, `KeyboardSettingsView`) |
 | Undo / Redo | ⌘Z / ⇧⌘Z | Everywhere | menu (`BulkEditUndo`: Develop session / bulk-edit steps newest first; Library: a bulk step on top of the window's UndoManager, else the responder chain) |
-| Pick / Unflag / Reject | P / U / X | Everywhere | menu (`SloproomCommands` → `FlagActions`) |
+| Pick / Unflag / Reject | P / U / X | Everywhere | menu (`KikaCommands` → `FlagActions`) |
 | Rating None…★★★★★ (`rating0`–`rating5`) | 0–5 | Everywhere | menu |
-| Copy / Paste Settings, Before / After | ⇧⌘C / ⇧⌘V, `\` | Everywhere | menu (photo actions registry `PhotoMenuBarItems`; Before / After: `SloproomCommands`) |
+| Copy / Paste Settings, Before / After | ⇧⌘C / ⇧⌘V, `\` | Everywhere | menu (photo actions registry `PhotoMenuBarItems`; Before / After: `KikaCommands`) |
 | Sync Settings… (`syncSettings`), Reset Edits (`resetEdits`), Show in Finder (`showInFinder`) | ⇧⌘S, ⇧⌘R, ⌘R (Lightroom's keys) | Everywhere | menu (photo actions registry, `PhotoMenuBarItems` → `PhotoActions.performFromMenu`) |
 | Bulk Crop… (`bulkCrop`) | none (assignable) | Everywhere | menu (photo actions registry) |
-| Create Virtual Copy (`createVirtualCopy`) | ⌘' | Everywhere (Library & Develop; ignored while the full-screen preview shows) | menu (`SloproomCommands` → `VirtualCopyActions.createFromMenu`) |
+| Create Virtual Copy (`createVirtualCopy`) | ⌘' | Everywhere (Library & Develop; ignored while the full-screen preview shows) | menu (`KikaCommands` → `VirtualCopyActions.createFromMenu`) |
 | Library (`libraryMode`) | G | Everywhere | menu |
 | Develop (`developMode`) | D | Everywhere | menu + dispatcher handler (AppKit's Start Dictation takes plain D) — `LibraryKeyMonitor` |
 | Select All Photos (`selectAllPhotos`) | ⌘A (was ⌥⌘A in the menu) | Library & Develop | dispatcher (`LibraryKeyMonitor`); the menu item shows no key (SwiftUI drops the duplicate of Edit > Select All) |
@@ -366,7 +366,7 @@ View / Help > Keyboard Shortcuts…). Never hard-code a key in a handler or a to
 | Previous / Next Photo | ← / → | Develop & Full Screen | `DevelopCanvasView` (not while the sidebar list has focus), `FullScreenPreview` |
 | Zoom Fit ↔ 1:1 at the pointer, Zoom In, Zoom Out (next / previous preset, also from a free pinch level) | Z, ⌘= (⌘+), ⌘- (⌘_) | Develop & Full Screen | `ZoomEventMonitor` (handlers per ZoomController / window) |
 | Zoom to Fit (`zoomFit`) | ⌘0 | Develop & Full Screen | `ZoomEventMonitor` |
-| Show / Hide Folders (`toggleSidebar`) | ⌃⌘S | Everywhere (menu View > Show / Hide Folders; the toolbar sidebar button and the view bar button do the same) | menu (`SloproomCommands` → `DevelopPanels.toggleSidebar(in:)`, per mode) |
+| Show / Hide Folders (`toggleSidebar`) | ⌃⌘S | Everywhere (menu View > Show / Hide Folders; the toolbar sidebar button and the view bar button do the same) | menu (`KikaCommands` → `DevelopPanels.toggleSidebar(in:)`, per mode) |
 | Hand Tool (hold) (`temporaryHand`) | Space | Develop & Full Screen | `ZoomEventMonitor` (key-up releases) |
 | Show / Hide Side Panels, All Panels | Tab, ⇧Tab | Develop | `DevelopPanels` (`developPanelShortcuts`) |
 | Increase / Decrease Thumbnail Size | ⌘= (⌘+) / ⌘- (step 20 pt of the 100…400 slider) | Library | `LibraryGridView` |
@@ -408,8 +408,8 @@ pinch (free-form) / two-finger double tap (smart magnify: Fit ↔ 100 %) / ⌘- 
   the pointer, so dropping on the Finder / another app copies the original file (in-app drops read the plain-text
   payload registered first). Develop's filmstrip drags exactly like the grid (`act stripdrag <i> plain|cmd|opt <folder>`
   drops a real filmstrip drag payload through SwiftUI's drop destination).
-- In-app drag & drop: plain-text `SloproomDragPayload` (`sloproom-drag:photos:1,2` / `…folder:7`)
-  in an `NSItemProvider` via `SloproomDrag.provider(_:)`; drop targets decode it with `SloproomDrag.load`.
+- In-app drag & drop: plain-text `KikaDragPayload` (`kika-drag:photos:1,2` / `…folder:7`)
+  in an `NSItemProvider` via `KikaDrag.provider(_:)`; drop targets decode it with `KikaDrag.load`.
 - Photos dropped on a folder row (`PhotoDropVerb`, Finder-like): plain = **Add** (same photo; proposal
   `.alias`), ⌘ = **Move** out of the shown folder (only while another folder is shown; `.move`), ⌥ =
   **Copy** = new virtual copies inside the target (`.copy`). The hovered row shows an Add / Move / Copy
@@ -651,7 +651,7 @@ trailing actions); rows are included only while shown. Remembered in `sidebar.se
 
 ## Decode profiles (`Develop/Decode/`, harness `Tools/decode_check.swift`)
 
-RAW decode calibration: Apple's `CIRAWFilter` knobs plus Sloproom's own front-end constants, in layers
+RAW decode calibration: Apple's `CIRAWFilter` knobs plus Кика's own front-end constants, in layers
 where each layer only overrides what it sets (`nil` = inherit):
 
 ```
@@ -663,7 +663,7 @@ built-in (Apple's per-file defaults + DecodeParams.builtin)
 - `DecodeParams` (all optional, stable JSON keys): Apple — `boost` (boostAmount 0…1), `boostShadow` (0…2),
   `shadowBias`, `luminanceNoiseReduction`, `colorNoiseReduction`, `sharpness`, `localContrast` (contrastAmount),
   `detail` (0…3), `moireReduction`, `localToneMap`, `highlightRecovery` (macOS 26+), `gamutMapping`,
-  `lensCorrection`; Sloproom — `cameraMatchedBrightness` (BaselineExposure offset on/off), `baselineOffset` (EV),
+  `lensCorrection`; Кика — `cameraMatchedBrightness` (BaselineExposure offset on/off), `baselineOffset` (EV),
   `highlightNeutralStart/End` (clip fade, × raw clip level), `shoulderKnee`, `shoulderHueKeep`. Apple values
   default to "Auto" (nil) because Apple picks several per file (noise reduction by ISO…). `DecodeParamInfo.all`
   describes every field (title, help, group, range, key path) for UI / merging / harnesses; `overlaid(by:)` merges.
@@ -700,8 +700,9 @@ built-in (Apple's per-file defaults + DecodeParams.builtin)
   whose resolved params changed (old settings under old profiles vs new under new) → their previews regenerate;
   posts `.photosUpdated(those)` + `.decodeProfiles`. Deleting a profile clears photo references to it. Unedited
   photos need nothing (thumbnails = camera JPEG; Develop resolves live).
-- Files: `DecodeProfileFile` (`.sloproomdecode`, JSON `{format: "sloproom.decodeProfiles", version: 1,
-  exportedAt, profiles: [{name, cameraMake?, cameraModel?, notes?, params}]}`); import makes names unique.
+- Files: `DecodeProfileFile` (`.kikadecode`, JSON `{format: "kika.decodeProfiles", version: 1,
+  exportedAt, profiles: [{name, cameraMake?, cameraModel?, notes?, params}]}`); import makes names unique
+  and still accepts pre-rename files (`.sloproomdecode`, `format: "sloproom.decodeProfiles"`).
 - UI (`Develop/Decode/UI/`): `DecodeProfilesStore.shared` (@Observable mirror + `revision`, reloaded on
   `.decodeProfiles`); `RawDecodePanel` (Develop inspector, first panel, RAW only, collapsed by default:
   profile picker, chain, every knob as an override of this photo with its inherited source, decoder picker,
@@ -965,13 +966,13 @@ edited elsewhere are dropped after `.photosUpdated`. `purgeAll()` resets all in-
   At most `maxConcurrentRenders` (2) renders at once, one `autoreleasepool` per photo. A photo whose
   render finishes after `cancel()` is dropped (never half-written).
 - Metadata (`ExportMetadata`): EXIF (dates, exposure, lens), ExifAux, GPS, IPTC, TIFF make/model/date
-  from the original; Orientation 1, EXIF pixel size = output, ColorSpace sRGB, Software "Sloproom";
+  from the original; Orientation 1, EXIF pixel size = output, ColorSpace sRGB, Software "Kika";
   no thumbnail, no CFA/DNG fields. RAWs without `OffsetTime*` take them from the sidecar JPEG when
   the capture wall-clock time matches (Leica).
 - Files (`ExportFiles`): name = original base name (`Photo.exportBaseName`: "IMG (Copy 1)" for a virtual copy) + `.jpg`, `-1`, `-2`… for names that exist or
-  are claimed by the same job; written to a hidden `.sloproom-export-*.jpg.tmp` in the destination
+  are claimed by the same job; written to a hidden `.kika-export-*.jpg.tmp` in the destination
   (exclusive create + fsync), then `renamex_np(RENAME_EXCL)`. `checkWriteAccess` = probe file:
-  `ExportError.noWriteAccess` → "Sloproom doesn't have write access to “…”. Enable User Selected
+  `ExportError.noWriteAccess` → "Кика doesn't have write access to “…”. Enable User Selected
   File: Read/Write in Signing & Capabilities." (stops the job), `.unavailable` for a missing folder.
   Offline / unreadable / failed photos are skipped and listed (`ExportResult.skipped`, `summary`).
 - UI (`Export/UI/`): `ExportController.shared` (@Observable; destination remembered as a

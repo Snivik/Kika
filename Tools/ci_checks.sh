@@ -13,7 +13,7 @@ set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 OUT="${1:-/private/tmp/claude-501/ci-checks}"
-APP=sloproom
+APP=Kika
 export HARNESS_OPT="${HARNESS_OPT:--Onone}"
 mkdir -p "$OUT"
 cd "$REPO" || exit 1

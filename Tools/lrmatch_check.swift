@@ -497,13 +497,13 @@ struct LRMatchCheck {
         if args.count > 2, args[1] == "fit" {
             let dngURL = URL(fileURLWithPath: "/Users/snivik/Pictures/Lightroom Tuning/L1100118.DNG")
             guard let src = RenderPipeline.makeSource(url: dngURL) else { exit(1) }
-            runFit(name: args[2], source: src, tuning: URL(fileURLWithPath: NSHomeDirectory() + "/Library/Containers/dev.snivik.sloproom/Data/tmp/tuning"),
+            runFit(name: args[2], source: src, tuning: URL(fileURLWithPath: NSHomeDirectory() + "/Library/Containers/dev.snivik.kika/Data/tmp/tuning"),
                    maxEvals: args.count > 3 ? Int(args[3]) ?? 60 : 60)
             return
         }
         let dng = URL(fileURLWithPath: args.count > 1 && !args[1].isEmpty ? args[1] : "/Users/snivik/Pictures/Lightroom Tuning/L1100118.DNG")
         let tuning = URL(fileURLWithPath: args.count > 2 && !args[2].isEmpty ? args[2]
-                         : NSHomeDirectory() + "/Library/Containers/dev.snivik.sloproom/Data/tmp/tuning")
+                         : NSHomeDirectory() + "/Library/Containers/dev.snivik.kika/Data/tmp/tuning")
         let label = args.count > 3 && !args[3].isEmpty ? args[3] : "run"
         let only = args.count > 4 && !args[4].isEmpty ? Set(args[4].lowercased().split(separator: ",").map(String.init)) : nil
         let doCrops = !(args.count > 5 && args[5] == "nocrop")

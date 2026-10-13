@@ -3,8 +3,8 @@
 //  Headless test of folder management + flag counts (catalog side, drag payloads, drop planning).
 //
 //    Tools/harness.sh /private/tmp/claude-501/out-folders/folders_check Tools/folders_check.swift \
-//        sloproom/App/FolderTree.swift sloproom/Library/Sidebar/Catalog+FolderManagement.swift \
-//        sloproom/Library/Sidebar/FolderDragPayload.swift
+//        Kika/App/FolderTree.swift Kika/Library/Sidebar/Catalog+FolderManagement.swift \
+//        Kika/Library/Sidebar/FolderDragPayload.swift
 //    /private/tmp/claude-501/out-folders/folders_check [out-dir]
 //
 //  Uses synthetic photo rows (no image files needed); writes only a temp catalog into out-dir.
@@ -156,10 +156,10 @@ struct FoldersCheck {
 
         // MARK: Drag payloads
         print("Drag payloads")
-        check(SloproomDragPayload(string: SloproomDragPayload.photos([3, 1, 2]).string) == .photos([3, 1, 2]), "photos payload round trip keeps order")
-        check(SloproomDragPayload(string: SloproomDragPayload.folder(42).string) == .folder(42), "folder payload round trip")
-        check(SloproomDragPayload(string: "hello") == nil && SloproomDragPayload(string: "sloproom-drag:photos:") == nil
-              && SloproomDragPayload(string: "sloproom-drag:folder:x") == nil, "foreign / malformed text rejected")
+        check(KikaDragPayload(string: KikaDragPayload.photos([3, 1, 2]).string) == .photos([3, 1, 2]), "photos payload round trip keeps order")
+        check(KikaDragPayload(string: KikaDragPayload.folder(42).string) == .folder(42), "folder payload round trip")
+        check(KikaDragPayload(string: "hello") == nil && KikaDragPayload(string: "kika-drag:photos:") == nil
+              && KikaDragPayload(string: "kika-drag:folder:x") == nil, "foreign / malformed text rejected")
 
         // MARK: Scale: 100 folders x 22k photos
         print("Scale (22k photos, 100 folders)")

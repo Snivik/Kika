@@ -5,7 +5,7 @@
 //
 //  Build & run:
 //    Tools/harness.sh /private/tmp/claude-501/out-sdimport/sdimport_check Tools/sdimport_check.swift \
-//        sloproom/Import/ImportEngine.swift sloproom/Import/Catalog+Import.swift
+//        Kika/Import/ImportEngine.swift Kika/Import/Catalog+Import.swift
 //    /private/tmp/claude-501/out-sdimport/sdimport_check [sample-dir] [out-dir]
 //
 //  COPIES a few sample DNG+JPG pairs into <out>/fakecard/DCIM/100LEICA (samples are read-only),

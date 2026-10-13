@@ -3,8 +3,8 @@
 //  Headless check of Export Catalog / Import Catalog (replace + backup) / Relink.
 //
 //  Tools/harness.sh /private/tmp/claude-501/catalog-out/catalog_transfer_check Tools/catalog_transfer_check.swift \
-//    sloproom/CatalogTransfer/CatalogTransfer.swift \
-//    sloproom/LightroomImport/RootAccess.swift
+//    Kika/CatalogTransfer/CatalogTransfer.swift \
+//    Kika/LightroomImport/RootAccess.swift
 //  /private/tmp/claude-501/catalog-out/catalog_transfer_check <catalog-dir-to-COPY> [out-dir]
 //
 //  <catalog-dir-to-COPY> holds a Catalog.sqlite (+ -wal/-shm) — e.g. a COPY of the realistic live
@@ -28,7 +28,7 @@ struct CatalogTransferCheck {
         let args = CommandLine.arguments
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let source = URL(fileURLWithPath: args.count > 1 ? args[1]
-                         : home + "/Library/Containers/dev.snivik.sloproom/Data/tmp/catalog/pristine", isDirectory: true)
+                         : home + "/Library/Containers/dev.snivik.kika/Data/tmp/catalog/pristine", isDirectory: true)
         let out = URL(fileURLWithPath: args.count > 2 ? args[2] : "/private/tmp/claude-501/catalog-out/run", isDirectory: true)
         let fm = FileManager.default
         try? fm.removeItem(at: out)
@@ -52,7 +52,7 @@ struct CatalogTransferCheck {
         let exports = out.appendingPathComponent("exports", isDirectory: true)
         try fm.createDirectory(at: exports, withIntermediateDirectories: true)
         let exportURL = exports.appendingPathComponent(CatalogTransfer.defaultExportName())
-        check(exportURL.lastPathComponent.hasPrefix("Sloproom Catalog 20") && exportURL.pathExtension == "sloproomcatalog",
+        check(exportURL.lastPathComponent.hasPrefix("Кика Catalog 20") && exportURL.pathExtension == "kikacatalog",
               "default name \(exportURL.lastPathComponent)")
         let someID = try live.db.scalarInt("SELECT id FROM photos ORDER BY id LIMIT 1") ?? 0
         let someRating = try live.photo(id: someID)?.rating ?? 0
@@ -90,19 +90,19 @@ struct CatalogTransferCheck {
 
         // MARK: Refusals
         print("== refusals")
-        let newer = out.appendingPathComponent("newer.sloproomcatalog")
+        let newer = out.appendingPathComponent("newer.kikacatalog")
         try fm.copyItem(at: exportURL, to: newer)
         try setPragma(newer, "PRAGMA user_version = \(Catalog.schemaVersion + 1)")
         expectError(try CatalogTransfer.stageImport(from: newer, stagingDirectory: out.appendingPathComponent("stage-x"))) {
             if case .newerSchema(let f, let s) = $0 { return f == Catalog.schemaVersion + 1 && s == Catalog.schemaVersion }; return false
         }
-        let newerFormat = out.appendingPathComponent("newerformat.sloproomcatalog")
+        let newerFormat = out.appendingPathComponent("newerformat.kikacatalog")
         try fm.copyItem(at: exportURL, to: newerFormat)
         try setPragma(newerFormat, "UPDATE catalog_info SET value = '99' WHERE key = 'format_version'")
         expectError(try CatalogTransfer.stageImport(from: newerFormat, stagingDirectory: out.appendingPathComponent("stage-x"))) {
             if case .newerFormat = $0 { return true }; return false
         }
-        let text = out.appendingPathComponent("notes.sloproomcatalog")
+        let text = out.appendingPathComponent("notes.kikacatalog")
         try Data("hello, not a database at all — just some text padding it out".utf8).write(to: text)
         expectError(try CatalogTransfer.stageImport(from: text, stagingDirectory: out.appendingPathComponent("stage-x"))) {
             if case .notACatalog = $0 { return true }; return false
@@ -117,7 +117,7 @@ struct CatalogTransferCheck {
 
         // MARK: Import as replacement into a temp app-support dir
         print("== import (replace)")
-        let appSupport = out.appendingPathComponent("AppSupport/Sloproom", isDirectory: true)
+        let appSupport = out.appendingPathComponent("AppSupport/Kika", isDirectory: true)
         let current = try Catalog.open(at: appSupport)
         let cp = try current.insertPhotos([Photo(path: "/tmp/cur/a.jpg"), Photo(path: "/tmp/cur/b.jpg"), Photo(path: "/tmp/cur/c.jpg")])
         let cf = try current.createFolder(name: "Current Only")

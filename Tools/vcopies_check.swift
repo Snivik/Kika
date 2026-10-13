@@ -7,14 +7,14 @@
 //  relink rewriting copies, removal cascade, preview seeding / cleanup, export file names.
 //
 //    Tools/harness.sh /private/tmp/claude-501/out-vcopies/vcopies_check Tools/vcopies_check.swift \
-//        sloproom/VirtualCopies/Catalog+VirtualCopies.swift sloproom/VirtualCopies/VirtualCopyPreviews.swift \
-//        sloproom/Import/Catalog+Import.swift sloproom/LightroomImport/RootAccess.swift \
-//        sloproom/LightroomImport/LightroomCatalogReader.swift sloproom/LightroomImport/LightroomImportPlan.swift \
-//        sloproom/LightroomImport/Catalog+LightroomImport.swift sloproom/Export/ExportEngine.swift \
-//        sloproom/Develop/Crop/CropMath.swift
+//        Kika/VirtualCopies/Catalog+VirtualCopies.swift Kika/VirtualCopies/VirtualCopyPreviews.swift \
+//        Kika/Import/Catalog+Import.swift Kika/LightroomImport/RootAccess.swift \
+//        Kika/LightroomImport/LightroomCatalogReader.swift Kika/LightroomImport/LightroomImportPlan.swift \
+//        Kika/LightroomImport/Catalog+LightroomImport.swift Kika/Export/ExportEngine.swift \
+//        Kika/Develop/Crop/CropMath.swift
 //    /private/tmp/claude-501/out-vcopies/vcopies_check [realistic-catalog-dir to COPY] [sample.jpg] [out-dir]
 //
-//  Defaults: ~/Library/Containers/dev.snivik.sloproom/Data/tmp/vcopies/pristine (copied first, never
+//  Defaults: ~/Library/Containers/dev.snivik.kika/Data/tmp/vcopies/pristine (copied first, never
 //  opened in place), …/Data/tmp/folders/photos/L1090230.JPG (read only), /private/tmp/claude-501/out-vcopies.
 //
 
@@ -40,8 +40,8 @@ struct VirtualCopiesCheck {
     static func main() async throws {
         let args = CommandLine.arguments
         let home = FileManager.default.homeDirectoryForCurrentUser.path
-        let realistic = URL(fileURLWithPath: args.count > 1 ? args[1] : "\(home)/Library/Containers/dev.snivik.sloproom/Data/tmp/vcopies/pristine")
-        let sample = URL(fileURLWithPath: args.count > 2 ? args[2] : "\(home)/Library/Containers/dev.snivik.sloproom/Data/tmp/folders/photos/L1090230.JPG")
+        let realistic = URL(fileURLWithPath: args.count > 1 ? args[1] : "\(home)/Library/Containers/dev.snivik.kika/Data/tmp/vcopies/pristine")
+        let sample = URL(fileURLWithPath: args.count > 2 ? args[2] : "\(home)/Library/Containers/dev.snivik.kika/Data/tmp/folders/photos/L1090230.JPG")
         let out = URL(fileURLWithPath: args.count > 3 ? args[3] : "/private/tmp/claude-501/out-vcopies")
         let run = out.appendingPathComponent("run-\(UUID().uuidString.prefix(8))")
         try FileManager.default.createDirectory(at: run, withIntermediateDirectories: true)

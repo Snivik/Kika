@@ -1,10 +1,10 @@
 //
 //  tags_check.swift
-//  Tags (sloproom/Tags): definitions, per-author values, effective value / to-review filtering, confirm,
+//  Tags (Kika/Tags): definitions, per-author values, effective value / to-review filtering, confirm,
 //  value-list edits, folder tags, cascades.
 //
 //  Build & run:
-//    Tools/harness.sh /private/tmp/claude-501/tags-out/tags_check Tools/tags_check.swift sloproom/App/FolderTree.swift
+//    Tools/harness.sh /private/tmp/claude-501/tags-out/tags_check Tools/tags_check.swift Kika/App/FolderTree.swift
 //    /private/tmp/claude-501/tags-out/tags_check [out-dir]
 //
 //  Writes only a temp catalog in out-dir. No sample photos needed (runs in CI).

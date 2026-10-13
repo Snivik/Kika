@@ -1,12 +1,14 @@
-# Sloproom
+# Кика
 
-<p align="center"><img src="docs/screenshots/editor.png" alt="Sloproom's Develop view: library sidebar, photo, filmstrip and adjustment panels" width="900"></p>
+Кика is pronounced (and transliterated) "Kika". It's named after the [kika](https://ru.wikipedia.org/wiki/%D0%9A%D0%B8%D0%BA%D0%B0_%28%D0%B3%D0%BE%D0%BB%D0%BE%D0%B2%D0%BD%D0%BE%D0%B9_%D1%83%D0%B1%D0%BE%D1%80%29), a horned headdress women wore in old Russia.
 
-> **Alpha.** Sloproom is a personal project under active development. Back up your catalog
+<p align="center"><img src="docs/screenshots/editor.png" alt="Кика's Develop view: library sidebar, photo, filmstrip and adjustment panels" width="900"></p>
+
+> **Alpha.** Кика is a personal project under active development. Back up your catalog
 > (File → Export Catalog) before updating.
 
 > [!WARNING]
-> **macOS will say it "could not verify Sloproom".** Release builds are signed by the developer but not
+> **macOS will say it "could not verify Кика".** Release builds are signed by the developer but not
 > notarized by Apple (that needs a Developer ID distribution setup this hobby project doesn't have). Pick one:
 > - **Use the release build:** after the warning, choose System Settings → Privacy & Security → **Open Anyway**
 >   (once per download). See [Install](#install).
@@ -56,7 +58,7 @@ Edit with the controls you already know:
   <img src="docs/screenshots/raw-decode-settings.png" alt="Raw Decode settings: camera defaults and profiles" width="560">
 </p>
 
-Sloproom uses Apple's RAW engine, the same camera database and demosaicing every Mac app gets, and exposes the
+Кика uses Apple's RAW engine, the same camera database and demosaicing every Mac app gets, and exposes the
 settings most apps hide:
 - the base tone curve and black point;
 - noise reduction, sharpening and detail;
@@ -86,19 +88,19 @@ settings most apps hide:
 
 <p align="center"><img src="docs/screenshots/lightroom-import.png" alt="Import Lightroom Catalog sheet" width="560"></p>
 
-Point Sloproom at a Lightroom Classic catalog and it brings in your photos where they already are on disk:
+Point Кика at a Lightroom Classic catalog and it brings in your photos where they already are on disk:
 - collections become folders;
 - pick and reject flags and star ratings come along;
 - virtual copies merge into their masters.
 
-Lightroom edits aren't imported. Sloproom can also import from cards and folders, with a review page that spots
+Lightroom edits aren't imported. Кика can also import from cards and folders, with a review page that spots
 duplicates and asks before overwriting anything.
 
 ### Your drives, your permissions
 
 <p align="center"><img src="docs/screenshots/drives.png" alt="Settings › Drives: access per folder and drive" width="680"></p>
 
-Sloproom is sandboxed. It sees only the folders and drives you grant, and Settings › Drives shows each one. When
+Кика is sandboxed. It sees only the folders and drives you grant, and Settings › Drives shows each one. When
 a drive is renamed or files move, Relink points the catalog at the new place. The whole catalog can be exported
 and imported, with automatic backups.
 
@@ -111,21 +113,26 @@ See [CHANGELOG.md](CHANGELOG.md) for what's in each release.
 
 ## Install
 
-1. Download the latest `Sloproom-<version>-alpha-universal.zip` from
+1. Download the latest `Kika-<version>-alpha-universal.zip` from
    [Releases](https://github.com/Snivik/Sloproom/releases). It runs on Apple Silicon and Intel with macOS 15 or later.
-2. Unzip it and move `Sloproom.app` to Applications.
+2. Unzip it and move `Кика.app` to Applications.
 3. The app isn't notarized, so macOS blocks the first launch. Open it once, then choose
    System Settings → Privacy & Security → **Open Anyway**. You can also run this instead:
 
 ```bash
-xattr -dr com.apple.quarantine /Applications/Sloproom.app
+xattr -dr com.apple.quarantine /Applications/Кика.app
 ```
+
+**Coming from Sloproom?** Кика has a new bundle ID, so it starts with an empty catalog and default settings.
+To bring your old catalog over, choose File › Export Catalog… in Sloproom, then File › Import Catalog… in
+Кика and pick the `.sloproomcatalog` file. Folder and drive access doesn't carry over, so grant it again when
+the import asks, or later in Settings › Drives.
 
 ### Build it yourself
 
 You need Xcode 27 on macOS 15 or later.
 
-- **In Xcode:** open `sloproom.xcodeproj`. Under the sloproom target › Signing & Capabilities, pick your own team
+- **In Xcode:** open `Kika.xcodeproj`. Under the Kika target › Signing & Capabilities, pick your own team
   (a free Apple account works) or "Sign to Run Locally", then choose Product › Run.
 - **From the command line:** this makes an ad-hoc signed universal app and zip in `build/<version>/`:
 
@@ -154,7 +161,7 @@ are signed ad hoc.
 
 ## Development
 
-- **Building:** open `sloproom.xcodeproj` in Xcode, or see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#build).
+- **Building:** open `Kika.xcodeproj` in Xcode, or see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#build).
 - **Tests:** headless checks are compiled from the app sources. See [Tools/README.md](Tools/README.md).
   - `Tools/ci_checks.sh` runs the checks that need no sample photos.
 - **Screenshots:** the images in `docs/screenshots/` are cropped to the window, given rounded corners and a

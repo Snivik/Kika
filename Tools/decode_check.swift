@@ -5,7 +5,7 @@
 //
 //  Build & run:
 //    Tools/harness.sh /private/tmp/claude-501/decode-out/decode_check Tools/decode_check.swift \
-//      sloproom/Actions/EditSections.swift
+//      Kika/Actions/EditSections.swift
 //    /private/tmp/claude-501/decode-out/decode_check [raw-file] [out-dir]
 //
 //  Reads the RAW READ-ONLY; writes only into out-dir (temp catalog + JPEGs).
@@ -118,7 +118,7 @@ struct DecodeCheck {
         check(r1.params.boost == 0 && r1.layers.map(\.kind) == [.builtin, .camera], "camera default resolves")
         check(r1.source(of: DecodeParamInfo.info("boost")!)?.kind == .camera, "provenance of boost = camera")
         check(r1.source(of: DecodeParamInfo.info("sharpness")!) == nil, "unset Apple knob = Apple's default (no layer)")
-        check(r1.params.highlightNeutralStart == RawDecodeStage.clipNeutralStart, "Sloproom knobs default to built-in")
+        check(r1.params.highlightNeutralStart == RawDecodeStage.clipNeutralStart, "Кика knobs default to built-in")
 
         let hiISO = seeded[1]
         try catalog.setGlobalDecodeDefault(hiISO.id)
@@ -169,6 +169,11 @@ struct DecodeCheck {
         check(after.filter { newIDs.contains($0.id) }.map(\.params) == before.map(\.params), "imported params identical")
         check(after.filter { newIDs.contains($0.id) }.map(\.name) == before.map { "\($0.name) 2" }, "imported names made unique")
         check((try? DecodeProfileFile.read(Data("{\"a\":1}".utf8))) == nil, "foreign JSON refused")
+        let legacy = String(decoding: exported, as: UTF8.self)
+            .replacingOccurrences(of: "\"\(DecodeProfileFile.format)\"", with: "\"sloproom.decodeProfiles\"")
+        check(legacy.contains("sloproom.decodeProfiles")
+              && (try? DecodeProfileFile.read(Data(legacy.utf8)))?.profiles.count == before.count,
+              "pre-rename file (sloproom.decodeProfiles) still imports")
         let dup = try catalog.duplicateDecodeProfile(id: hiISO.id)
         check(try catalog.allDecodeProfiles().first { $0.id == dup }?.name == "Clean High ISO Copy", "duplicate")
         check(try catalog.decodeCameras().map(\.camera.displayName).contains("DC-S5M2") == false

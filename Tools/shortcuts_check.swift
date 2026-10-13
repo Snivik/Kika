@@ -2,12 +2,12 @@
 //  shortcuts_check.swift
 //  Tools
 //
-//  Headless check of the keyboard shortcut registry (sloproom/Shortcuts/ShortcutModel.swift +
+//  Headless check of the keyboard shortcut registry (Kika/Shortcuts/ShortcutModel.swift +
 //  ShortcutStore.swift): defaults, overrides persisting, conflicts per scope, narrower-scope
 //  overrides, resolution order, reset / reset all, spec parsing and key formatting.
 //
 //    HARNESS_NO_DEFAULT=1 Tools/harness.sh /private/tmp/claude-501/<you>/shortcuts_check Tools/shortcuts_check.swift \
-//      sloproom/Shortcuts/ShortcutModel.swift sloproom/Shortcuts/ShortcutStore.swift
+//      Kika/Shortcuts/ShortcutModel.swift Kika/Shortcuts/ShortcutStore.swift
 //    /private/tmp/claude-501/<you>/shortcuts_check
 //
 
@@ -23,7 +23,7 @@ struct ShortcutsCheck {
     }
 
     static func main() async throws {
-        let suite = "sloproom.shortcuts_check.\(ProcessInfo.processInfo.processIdentifier)"
+        let suite = "kika.shortcuts_check.\(ProcessInfo.processInfo.processIdentifier)"
         guard let defaults = UserDefaults(suiteName: suite) else { fatalError("no defaults suite") }
         defer { defaults.removePersistentDomain(forName: suite) }
 

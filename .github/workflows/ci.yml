@@ -44,7 +44,7 @@ jobs:
 
       - name: Build app
         run: |
-          xcodebuild -project sloproom.xcodeproj -scheme sloproom -configuration Debug \
+          xcodebuild -project Kika.xcodeproj -scheme Kika -configuration Debug \
             -derivedDataPath "$RUNNER_TEMP/dd" -destination 'generic/platform=macOS' \
             CODE_SIGNING_ALLOWED=NO -quiet build
 
@@ -124,9 +124,9 @@ jobs:
           cat >> "$notes" <<'EOF'
 
           ---
-          **Installing this alpha:** unzip and move Sloproom.app to Applications. It isn't notarized, so the
+          **Installing this alpha:** unzip and move Кика.app to Applications. It isn't notarized, so the
           first launch is blocked: open it once, then System Settings → Privacy & Security → Open Anyway
-          (or run `xattr -dr com.apple.quarantine /Applications/Sloproom.app`). Needs macOS 15 or later.
+          (or run `xattr -dr com.apple.quarantine /Applications/Кика.app`). Needs macOS 15 or later.
           EOF
-          gh release create "v$v" "$RUNNER_TEMP/release/Sloproom-$v-alpha-universal.zip" \
-            --title "Sloproom $v (alpha)" --notes-file "$notes" --prerelease --target "$GITHUB_SHA"
+          gh release create "v$v" "$RUNNER_TEMP/release/Kika-$v-alpha-universal.zip" \
+            --title "Кика $v (alpha)" --notes-file "$notes" --prerelease --target "$GITHUB_SHA"
