@@ -35,6 +35,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Kik
 | `App/DevTools.swift`, `App/IntegrationDevScript.swift` | "Add Folder in Place (Dev)", `DevScript` (DEBUG UI scripting); feature DevScript files live next to their feature |
 | `Catalog/*` | SQLite wrapper, catalog open/migrate, photos / folders / roots / crop-preset API, models, security scope |
 | `Tags/*` | tags on photos and folders: models, catalog API + filter SQL (engine); `Tags/UI/`: store, sidebar section, filter menu + chips, Develop panel, editor, DevScript `tag …` |
+| `Instagram/*` | Instagram plans: models + layout geometry, catalog API (engine); `Instagram/UI/`: store, plan board, slide view + drops, sidebar row + grid badge, actions, DevScript `insta …` |
 | `Import/*` | SD card / folder import: engine (`ImportEngine`), sheet state (`ImportSession`), sources, sheet UI, recap page (`ImportRecapView`), EXIF reader (`PhotoMetadataReader`) |
 | `LightroomImport/*` | Lightroom Classic catalog import (structure only), root access status / grants (`RootAccess`, `RootsAccessView`) |
 | `Library/*` | main window, grid (day sections: `PhotoDateSections`), cells, filmstrip, sidebar; `ThumbnailView` (the only preview loader) |
@@ -200,6 +201,7 @@ payload `Catalog.change(from: note) -> CatalogChange?`:
 | `.folderMembership(Set<Int64>)` | add/remove/move photos in folders |
 | `.roots`, `.cropPresets` | roots / preset CRUD |
 | `.tags` / `.photoTags(ids)` / `.folderTags` | tag CRUD / photo values / folder values (`Tags/Catalog+Tags`) |
+| `.insta` | Instagram plans / posts / slides / cells (`Instagram/Catalog+Insta`) |
 | `.decodeProfiles` | decode profile CRUD, global / camera defaults (`Develop/Decode/Catalog+DecodeProfiles`; also posts `.photosUpdated` for the edited photos whose resolved decode changed) |
 
 Your own extension methods should call `postChange(_:)` too. `AppModel` coalesces bursts and reloads
@@ -648,6 +650,45 @@ trailing actions); rows are included only while shown. Remembered in `sidebar.se
   `FolderSidebarState`; menus don't render inside sidebar List rows) filters folders by name and folder tags
   in memory (`TagValues.satisfies`, the twin of `tagSQL`) via `FolderTree.filtered`: matches plus their ancestors
   (dimmed), all expanded.
+
+## Instagram plans (`Instagram/`, harness `Tools/insta_check.swift`)
+
+- A folder has at most one plan (`insta_plans.folder_id` UNIQUE). A plan holds posts (`kind` post = carousel) and story
+  sets (`kind` story) in board order (`insta_posts`: title, caption, aspect, scheduled_at, status draft / ready /
+  posted, posted_at). Each holds slides (`insta_slides`: layout, span, background, gap); a slide's cells
+  (`insta_cells`, PK (slide, cell)) each show one photo placed by an `InstaTransform`: scale (1 = aspect-fill; column
+  `zoom`), centre offset in cell fractions, rotation in degrees (column added by `insta.v2`). `InstaFraming.placement`
+  turns it into centre / size / angle for any cell size (board, editor, export); `coverScale` / `fitScale` / `covers`
+  back Fill, Fit and the "Background shows" warning. A photo may leave gaps: the slide background shows.
+  Migration `insta.v1`; everything cascades from folders and photos. Writes post `.insta`.
+- Shapes: posts 4:5 (default), 3:4, 1:1, one per carousel; stories 9:16 (`InstaAspect.pixelSize`, 1080 wide).
+  Layouts: `InstaLayout.cellRects(in:gap:)` (unit rects, outer margin = gap = inner gap), shared by the board and
+  the coming export.
+- Split = a single-photo post slide with `span` n > 1: it is drawn n frames wide and exports as n slides. A carousel
+  is limited to 20 exported slides (`InstaError.carouselFull`); a multi-cell layout or a move into stories resets span.
+- Used = the photo is in any cell. `Catalog.instaUsage()` → labels per post ("P2", "S1", numbered per kind in board
+  order) for grid badges (`InstaUsageBadge` in `PhotoGridCell`); `PhotoFilter.insta` (`.unused` / `.used`) is a
+  `NOT IN / IN (SELECT photo_id FROM insta_cells)` clause in `photos(in:)`, which checks the table exists (feature table).
+- UI: sidebar row "Instagram" = first child of its folder (`FolderOutline`, `SidebarItem.plan`); folder context menu
+  New / Show Instagram Plan. `AppModel.selectedPlanID` switches Library to `InstaBoardView`: the Library grid as the
+  pool (`selectedSource` = the plan's folder; showing any other source clears the plan) and the cards. Drops carry
+  `KikaDragPayload.photos` / `.slide`: on a slide's left / right edge insert, in the middle fill the cell under the
+  pointer; the last slot appends (or adds the grid selection on click); dragging a slide moves it. Board cells only
+  draw (`InstaCellView` / `InstaPhotoView`, 2048 px preview when the drawn photo needs it). Adjust Photos… (slide menu
+  or double-click; `InstaStore.editingSlideID` → `InstaAdjustSheet`) shows the whole slide with the selected photo's
+  overflow faded around it, cut lines for splits; drag moves, corner handles scale, the knob rotates (⇧ 15°, settles
+  on straight within 1°), pinch / trackpad rotate, arrows nudge; sliders, quarter turns, Fill / Fit / Center / Reset,
+  the split's slide count. Edits are a draft until Done (`InstaActions.setTransforms`: shown at once via
+  `InstaStore.setTransforms`, one catalog transaction). Posted cards are locked.
+- Calendar (named for any platform; Instagram only for now) (`InstaCalendarView`; sidebar Library row `SidebarItem.instaCalendar`, shown once any plan exists,
+  badge = unposted posts dated today or later; Calendar button on the board): `AppModel.showsInstaCalendar` over the
+  current source. `InstaStore.allPosts` = `instaPosts(planID: nil)` (every plan) and `photos` also holds each post's
+  first photo. Month grid by `scheduled_at` (Calendar.current, first weekday), filter posts / stories / both and
+  posted (`insta.calendar.*` defaults); Not Scheduled list by folder. `KikaDragPayload.post` drags an entry to a day
+  (`InstaActions.schedule` keeps the time, 18:00 for a first date) or to Not Scheduled (clears it). Clicking opens the
+  board with `revealPostID` (scrolled to once laid out, title focused). `InstaStore`
+  mirrors plans, usage, and the shown plan's posts and photos (reloaded on `.insta`, `.folders`, photo removals,
+  and edits of photos on the board).
 
 ## Decode profiles (`Develop/Decode/`, harness `Tools/decode_check.swift`)
 

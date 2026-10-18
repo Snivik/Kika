@@ -59,6 +59,7 @@ struct PhotoGridCell: View {
             FlagBadge(flag: photo.flag, isHovering: isHovering, onTogglePick: onTogglePick).padding(11)
         }
         .overlay(alignment: .topTrailing) { VirtualCopyBadge(photo: photo).padding(11) }
+        .overlay(alignment: .bottomLeading) { InstaUsageBadge(photoID: photo.id).padding(.leading, 11).padding(.bottom, 28) }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
     }

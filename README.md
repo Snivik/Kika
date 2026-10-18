@@ -86,6 +86,32 @@ settings most apps hide:
   has its own filter by name and tag.
 - **Sidebar:** every section can be hidden.
 
+### Instagram Planner
+
+<p align="center"><img src="docs/screenshots/instagram-planner.png" alt="Instagram plan: a folder's photos next to its posts and stories" width="900"></p>
+
+Turn a folder of final picks into posts and stories. Right-click the folder and choose New Instagram Plan:
+the folder's photos sit next to your posts and stories, and you drag them in.
+
+- **See what's left:** a badge on each photo shows the posts and stories it's in (P1, S2, …), and the filter
+  shows the photos you haven't used yet.
+- **Posts:** carousels of up to 20 slides in 4:5, 3:4 or 1:1, each with a caption, a planned date and a status
+  (draft, ready, posted).
+- **Stories:** frames with one photo or a layout of 2–4 photos.
+- **Splits:** cut one photo across 2–5 carousel slides, so it scrolls as one panorama.
+
+<p align="center"><img src="docs/screenshots/instagram-adjust.png" alt="Adjust Split: a panorama with its frame and cut line" width="620"></p>
+
+- **Adjust Photos:** opens a slide large. You can move, scale and rotate each photo in a layout. For a split you
+  frame the whole photo, with its frame and cut lines as a guide.
+
+<p align="center"><img src="docs/screenshots/calendar.png" alt="Calendar: posts and stories by planned date" width="900"></p>
+
+- **Calendar:** every plan's posts and stories on a month calendar.
+  - Filter by posts, stories or both.
+  - Drag one to another day to reschedule it.
+  - Click one to open it in its plan.
+
 ### Bring your Lightroom library
 
 <p align="center"><img src="docs/screenshots/lightroom-import.png" alt="Import Lightroom Catalog sheet" width="560"></p>

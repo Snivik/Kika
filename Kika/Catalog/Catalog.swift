@@ -33,6 +33,8 @@ nonisolated enum CatalogChange: Sendable, Equatable {
     case photoTags(Set<Int64>)
     /// Tag values of folders changed.
     case folderTags
+    /// Instagram plans, posts, slides or cells (Instagram/Catalog+Insta.swift).
+    case insta
 }
 
 nonisolated final class Catalog: @unchecked Sendable {

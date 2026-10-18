@@ -14,6 +14,10 @@ import SwiftUI
 struct ThumbnailView: View {
     let photo: Photo
     var level: PreviewLevel = .thumbnail
+    /// `.fill` covers the frame (callers clip it), e.g. Instagram slide cells.
+    var contentMode: ContentMode = .fit
+    /// Pixel size of the image shown (its aspect includes the Develop crop); Instagram cells frame with it.
+    var onImageSize: ((CGSize) -> Void)? = nil
 
     @State private var image: CGImage?
     @State private var loadedKey: LoadKey?
@@ -37,7 +41,7 @@ struct ThumbnailView: View {
                 Image(decorative: shown, scale: 1)
                     .resizable()
                     .interpolation(.high)
-                    .aspectRatio(contentMode: .fit)
+                    .aspectRatio(contentMode: contentMode)
             } else {
                 Rectangle().fill(.quaternary)
                 if status == .failed || status == .offline {
@@ -54,6 +58,9 @@ struct ThumbnailView: View {
             if status == .offline { offlineBadge }
         }
         .task(id: key) { await load(key) }
+        .onChange(of: shown.map { CGSize(width: $0.width, height: $0.height) }, initial: true) { _, size in
+            if let size { onImageSize?(size) }
+        }
     }
 
     private var offlineBadge: some View {

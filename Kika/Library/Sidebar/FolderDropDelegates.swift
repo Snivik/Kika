@@ -81,6 +81,8 @@ struct FolderRowDropDelegate: DropDelegate {
                 if let dest = FolderDropPlanner.destination(moving: id, onto: folderID, zone: z, folders: model.folders) {
                     FolderActions.move(id, to: dest, model: model)
                 }
+            case .slide, .post:
+                break
             }
         }
         return true
@@ -93,7 +95,7 @@ struct FolderRowDropDelegate: DropDelegate {
         case .folder(let id)?:
             let z = FolderDropZone(y: info.location.y, height: rowHeight)
             return FolderDropPlanner.destination(moving: id, onto: folderID, zone: z, folders: model.folders) == nil ? nil : z
-        case nil:
+        case .slide?, .post?, nil:
             return nil
         }
     }

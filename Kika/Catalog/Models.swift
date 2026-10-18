@@ -185,8 +185,22 @@ nonisolated struct PhotoFilter: Hashable, Sendable {
     var minRating: Int = 0
     /// Tag conditions, all must match (Tags/TagModels.swift).
     var tags: [TagCondition] = []
+    /// Used in an Instagram post or story set (Instagram/), or not.
+    var insta: InstaUseFilter = .any
 
-    var isEmpty: Bool { flag == .all && minRating == 0 && tags.isEmpty }
+    var isEmpty: Bool { flag == .all && minRating == 0 && tags.isEmpty && insta == .any }
+}
+
+nonisolated enum InstaUseFilter: String, Hashable, Sendable, CaseIterable {
+    case any, unused, used
+
+    var title: String {
+        switch self {
+        case .any: "Any"
+        case .unused: "Not Used"
+        case .used: "Used"
+        }
+    }
 }
 
 nonisolated struct PhotoSort: Hashable, Sendable {

@@ -34,7 +34,24 @@ final class AppModel {
     private(set) var totalPhotoCount = 0
 
     // MARK: Current photo list
-    var selectedSource: PhotoSource = .all { didSet { if selectedSource != oldValue { reloadPhotos() } } }
+    var selectedSource: PhotoSource = .all {
+        didSet {
+            guard selectedSource != oldValue else { return }
+            showsInstaCalendar = false
+            // The plan board's pool is its folder: showing anything else leaves the board.
+            if let planID = selectedPlanID, InstaStore.shared.plan(planID).map({ selectedSource != .folder(id: $0.folderID, includeSubfolders: includeSubfolders) }) ?? true {
+                selectedPlanID = nil
+            }
+            reloadPhotos()
+        }
+    }
+    /// The Instagram plan on the board (sidebar row under its folder; Instagram/UI). While set, Library shows
+    /// the plan board and `selectedSource` is the plan's folder (the photos to pick from).
+    var selectedPlanID: Int64? {
+        didSet { if selectedPlanID != oldValue { InstaStore.shared.show(planID: selectedPlanID, catalog: catalog) } }
+    }
+    /// Library shows the Calendar (sidebar Library › Calendar; Instagram/UI).
+    var showsInstaCalendar = false
     /// When a folder is selected, also show photos of its subfolders. On by default (Lightroom
     /// collection sets have no photos of their own); remembered across launches.
     var includeSubfolders = UserDefaults.standard.object(forKey: "library.includeSubfolders") as? Bool ?? true {
@@ -86,6 +103,7 @@ final class AppModel {
 
     private var pendingReloadPhotos = false
     private var pendingReloadFolders = false
+    private var pendingReloadInsta = false
     private var observer: NSObjectProtocol?
 
     init(catalog: Catalog) {
@@ -95,6 +113,7 @@ final class AppModel {
         self.catalog = catalog
         Self.loadDecodeProfiles(catalog)
         TagStore.shared.load(catalog)
+        InstaStore.shared.load(catalog)
         PreviewService.shared.configure(catalog: catalog)
         observeCatalog()
         reloadFolders()
@@ -134,6 +153,8 @@ final class AppModel {
         RecentRenders.shared.purgeAll()   // photo ids differ between catalogs
         Self.loadDecodeProfiles(newCatalog)
         TagStore.shared.load(newCatalog)
+        selectedPlanID = nil
+        InstaStore.shared.load(newCatalog)
         PreviewService.shared.configure(catalog: newCatalog)
         observeCatalog()
         selectedSource = .all
@@ -240,12 +261,19 @@ final class AppModel {
     /// Coalesces bursts of catalog notifications into one reload per run-loop turn.
     private func handle(_ change: CatalogChange) {
         switch change {
+        case .photosUpdated(let ids) where !ids.isDisjoint(with: InstaStore.shared.photos.keys):
+            InstaStore.shared.reloadPhotos(catalog)   // the plan board's thumbnails
+            pendingReloadPhotos = true
         case .photosUpdated, .photosInsertedOrRemoved:
             pendingReloadPhotos = true
-            if change == .photosInsertedOrRemoved { pendingReloadFolders = true }
+            if change == .photosInsertedOrRemoved { pendingReloadFolders = true; pendingReloadInsta = true }   // cells cascade
         case .folders, .folderMembership:
             pendingReloadFolders = true
             pendingReloadPhotos = true
+            if change == .folders { pendingReloadInsta = true }   // plans cascade with their folder
+        case .insta:
+            pendingReloadInsta = true
+            if filter.insta != .any { pendingReloadPhotos = true }   // only the Instagram filter changes which photos are shown
         case .roots:
             // Photos' root_id may have changed (a granted parent folder replaces inner roots).
             pendingReloadPhotos = true
@@ -271,6 +299,11 @@ final class AppModel {
     }
 
     private func flushPendingReloads() {
+        if pendingReloadInsta {
+            pendingReloadInsta = false
+            InstaStore.shared.load(catalog)
+            if let id = selectedPlanID, InstaStore.shared.plan(id) == nil { selectedPlanID = nil }
+        }
         if pendingReloadFolders { pendingReloadFolders = false; reloadFolders() }
         if pendingReloadPhotos { pendingReloadPhotos = false; reloadPhotos(inPlace: true) }
     }

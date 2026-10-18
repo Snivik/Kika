@@ -19,7 +19,9 @@ struct MainWindowView: View {
                 .navigationSplitViewColumnWidth(min: 220, ideal: 300, max: 480)
         } detail: {
             switch model.mode {
-            case .library: LibraryGridView()
+            case .library:
+                if model.showsInstaCalendar { InstaCalendarView() }   // Instagram/UI
+                else if model.selectedPlanID != nil { InstaBoardView() } else { LibraryGridView() }
             case .develop: DevelopView()
             }
         }
@@ -89,7 +91,11 @@ struct MainWindowView: View {
     }
 
     private var title: String {
-        switch model.selectedSource {
+        if model.showsInstaCalendar { return "Calendar" }
+        if let planID = model.selectedPlanID, let plan = InstaStore.shared.plan(planID) {
+            return (model.folders.first { $0.id == plan.folderID }?.name ?? "Folder") + " · Instagram"
+        }
+        return switch model.selectedSource {
         case .all: "All Photographs"
         case .lastImport: "Previous Import"
         case .folder(let id, _): model.folders.first { $0.id == id }?.name ?? "Folder"

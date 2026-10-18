@@ -20,6 +20,10 @@ enum SidebarItem: Hashable {
     /// Dates section: a year (month nil) or one month; photos without a capture date.
     case date(year: Int, month: Int?)
     case undated
+    /// An Instagram plan (a row under its folder; Instagram/UI).
+    case plan(Int64)
+    /// Library › Calendar (Instagram/UI).
+    case instaCalendar
 
     /// A row that is All Photographs + a filter; leaving it clears that filter.
     var isSmartSource: Bool {
@@ -33,11 +37,13 @@ enum SidebarItem: Hashable {
 extension AppModel {
     /// The sidebar row matching the current source + flag filter.
     var sidebarItem: SidebarItem {
-        switch selectedSource {
+        if showsInstaCalendar { return .instaCalendar }
+        if let planID = selectedPlanID { return .plan(planID) }
+        return switch selectedSource {
         case .all:
-            if filter.flag == .all, filter.minRating == 0, filter.tags.count == 1, let c = filter.tags.first {
+            if filter.flag == .all, filter.minRating == 0, filter.insta == .any, filter.tags.count == 1, let c = filter.tags.first {
                 .tag(c.tagID, c.match)
-            } else if !filter.tags.isEmpty || filter.minRating > 0 {
+            } else if !filter.tags.isEmpty || filter.minRating > 0 || filter.insta != .any {
                 .all
             } else {
                 switch filter.flag {
@@ -58,7 +64,16 @@ extension AppModel {
     func selectSidebarItem(_ item: SidebarItem) {
         guard item != sidebarItem else { return }
         let leavingSmartSource = sidebarItem.isSmartSource
+        if case .plan = item {} else { selectedPlanID = nil }
+        showsInstaCalendar = false
         switch item {
+        case .instaCalendar:
+            showsInstaCalendar = true   // over whatever source is shown (it doesn't change)
+        case .plan(let id):
+            guard let plan = InstaStore.shared.plan(id) else { return }
+            if leavingSmartSource { filter = PhotoFilter() }
+            selectedPlanID = id
+            selectedSource = .folder(id: plan.folderID, includeSubfolders: includeSubfolders)
         case .picked, .rejected:
             filter = PhotoFilter(flag: item == .picked ? .picked : .rejected)
             selectedSource = .all

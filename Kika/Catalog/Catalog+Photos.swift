@@ -151,6 +151,17 @@ nonisolated extension Catalog {
             args += tagArgs
         }
 
+        if filter.insta != .any {
+            // insta_cells is a feature table (Instagram/Catalog+Insta.swift): before the first plan, nothing is used.
+            let hasTable = try db.scalarInt("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'insta_cells'") == 1
+            switch (filter.insta, hasTable) {
+            case (.unused, true): conditions.append("p.id NOT IN (SELECT photo_id FROM insta_cells)")
+            case (.used, true): conditions.append("p.id IN (SELECT photo_id FROM insta_cells)")
+            case (.used, false): conditions.append("0")
+            default: break
+            }
+        }
+
         if !conditions.isEmpty { sql += " WHERE " + conditions.joined(separator: " AND ") }
         if case .folder(_, true) = source { sql += " GROUP BY p.id" }
 

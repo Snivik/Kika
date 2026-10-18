@@ -5,6 +5,31 @@ CI builds the universal app and publishes the top section as its release notes (
 Fix releases bump the patch (0.1.0 → 0.1.1); significant new features bump the minor (→ 0.2.0).
 Newest first; written for people, not commits.
 
+## 0.4.0 — 2026-10-18
+
+**Instagram Planner**
+- Right-click a folder and choose New Instagram Plan. An Instagram row appears under the folder. It shows the
+  folder's photos next to your posts and stories, so you can arrange 20–30 picks into a few posts and stories.
+- Drag photos onto a post or a set of stories. Drop on the edge of a slide to insert, in the middle to replace,
+  or on the last slot to add at the end. Drag slides to reorder them, also from one post to another.
+- Posts are carousels of up to 20 slides in 4:5, 3:4 or 1:1, with a caption (with a character count and Copy
+  Caption), a planned date and a status: Draft, Ready or Posted. Posted ones are locked.
+- Story frames can hold one photo or a layout: 2 stacked, 2 side by side, 3 stacked, a 2 × 2 grid, or 1 large +
+  2 small, on a white, black, cream or gray background.
+- Split a photo across 2–5 carousel slides so it scrolls as one panorama.
+- Adjust Photos (double-click a slide, or right-click it) opens the slide large. Each photo of a layout, or a split's
+  photo with its frame and cut lines as a guide, can be moved, scaled with its corner handles and rotated with the
+  handle above it, or with the sliders, quarter turns, Fill and Fit. The part of the photo outside the frame shows
+  faded, and a warning appears when the background would show. Nothing changes until you click Done.
+- A Calendar (in the sidebar's Library section, or Calendar on a plan) shows every plan's posts and stories
+  on a month calendar by planned date, with the first photo, time and status. Filter by Posts, Stories or both, and
+  hide what's posted. Drag one to another day to reschedule it, or onto Not Scheduled to clear its date. Click one to
+  open it in its plan.
+- Every photo used in a post or story shows a badge in the grid (P1, S2, …), and the Filter menu has Instagram:
+  Not Used and Used, so you can see which picks are left.
+- Exporting posts and stories as ready-to-upload images, and reminders when it's time to post, will come in a
+  later release.
+
 ## 0.3.0 — 2026-10-13
 
 **Sloproom is now Кика**

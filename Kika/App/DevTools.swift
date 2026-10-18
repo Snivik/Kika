@@ -192,6 +192,7 @@ enum DevScript {
                 case "decode": DecodeDevScript.run(arg, model: model)   // see Develop/Decode/UI/DecodeDevScript.swift
                 case "pointer": await CanvasPointerDevScript.run(arg)   // see Develop/Overlays/CanvasPointerDevScript.swift
                 case "tag": TagsDevScript.run(arg, model: model)   // see Tags/UI/TagsDevScript.swift
+                case "insta": InstaDevScript.run(arg, model: model)   // see Instagram/UI/InstaDevScript.swift
                 case let c where IntegrationDevScript.commands.contains(c): IntegrationDevScript.run(c, arg, model: model)
                 case let c where StripDevScript.commands.contains(c): StripDevScript.run(c, arg, model: model)   // Library/Flags/StripDevScript.swift
                 case let c where MaskDevScript.commands.contains(c): MaskDevScript.run(c, arg, session: model.developSession)
@@ -207,10 +208,11 @@ enum DevScript {
     /// it is obsoleted in the SDK), which can capture the app's OWN windows without
     /// screen-recording permission.
     static func snapshot(to path: String) {
-        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && !($0 is NSPanel) }) else {
+        guard let main = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && !($0 is NSPanel) }) else {
             print("DevScript: no window to snapshot")
             return
         }
+        let window = main.attachedSheet ?? main   // a sheet that is open (e.g. Adjust Photos) instead of the window behind it
         typealias CaptureFn = @convention(c) (CGRect, UInt32, UInt32, UInt32) -> Unmanaged<CGImage>?
         guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "CGWindowListCreateImage") else {
             print("DevScript: CGWindowListCreateImage unavailable")

@@ -20,12 +20,18 @@ struct FolderOutline: View {
     var body: some View {
         ForEach(nodes) { node in
             let dimmed = matching.map { !$0.contains(node.id) } ?? false
-            if node.children.isEmpty {
+            let plan = InstaStore.shared.plan(forFolder: node.id)   // its Instagram plan is the first child row
+            if node.children.isEmpty && plan == nil {
                 FolderRowView(node: node, counts: counts, isDimmed: dimmed)
                     .tag(SidebarItem.folder(node.id))
                     .id(SidebarItem.folder(node.id))
             } else {
                 DisclosureGroup(isExpanded: matching == nil ? FolderSidebarState.shared.expansionBinding(node.id) : .constant(true)) {
+                    if let plan {
+                        InstaPlanRow(plan: plan)   // Instagram/UI/InstaPlanRow.swift
+                            .tag(SidebarItem.plan(plan.id))
+                            .id(SidebarItem.plan(plan.id))
+                    }
                     FolderOutline(nodes: node.children, counts: counts, matching: matching)
                 } label: {
                     FolderRowView(node: node, counts: counts, isDimmed: dimmed)

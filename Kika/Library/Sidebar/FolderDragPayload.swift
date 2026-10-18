@@ -4,7 +4,7 @@
 //
 //  In-app drag & drop model (UI-free, tested by Tools/folders_check.swift).
 //
-//  Drags carry a plain-text payload ("kika-drag:photos:1,2,3" / "kika-drag:folder:7")
+//  Drags carry a plain-text payload ("kika-drag:photos:1,2,3" / "kika-drag:folder:7" / "kika-drag:slide:4")
 //  in an NSItemProvider. Plain text needs no exported UTType (the app uses a generated
 //  Info.plist); drops decode and validate the string, so foreign text is ignored.
 //
@@ -16,6 +16,10 @@ nonisolated enum KikaDragPayload: Hashable, Sendable {
     /// Photo ids in grid order (the whole selection when a selected photo is dragged).
     case photos([Int64])
     case folder(Int64)
+    /// A slide of an Instagram post or story set (Instagram/UI), moved on the plan board.
+    case slide(Int64)
+    /// An Instagram post or story set, dragged to another day in the calendar.
+    case post(Int64)
 
     static let prefix = "kika-drag:"
 
@@ -23,6 +27,8 @@ nonisolated enum KikaDragPayload: Hashable, Sendable {
         switch self {
         case .photos(let ids): Self.prefix + "photos:" + ids.map(String.init).joined(separator: ",")
         case .folder(let id): Self.prefix + "folder:\(id)"
+        case .slide(let id): Self.prefix + "slide:\(id)"
+        case .post(let id): Self.prefix + "post:\(id)"
         }
     }
 
@@ -35,6 +41,10 @@ nonisolated enum KikaDragPayload: Hashable, Sendable {
             self = .photos(ids)
         } else if body.hasPrefix("folder:"), let id = Int64(body.dropFirst("folder:".count)) {
             self = .folder(id)
+        } else if body.hasPrefix("slide:"), let id = Int64(body.dropFirst("slide:".count)) {
+            self = .slide(id)
+        } else if body.hasPrefix("post:"), let id = Int64(body.dropFirst("post:".count)) {
+            self = .post(id)
         } else {
             return nil
         }

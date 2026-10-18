@@ -32,6 +32,13 @@ struct PhotoFilterMenu: View {
                                          set: { model.filter.minRating = $0 ? n : 0 }))
                 }
             }
+            Section("Instagram") {
+                ForEach([InstaUseFilter.unused, .used], id: \.self) { f in
+                    Toggle(f.title, isOn: Binding(get: { model.filter.insta == f },
+                                                  set: { model.filter.insta = $0 ? f : .any }))
+                        .help(f == .unused ? "Photos not in any Instagram post or story yet" : "Photos in an Instagram post or story")
+                }
+            }
             if !store.photoTags.isEmpty {
                 Section("Tags") {
                     ForEach(store.photoTags) { tag in
@@ -58,7 +65,7 @@ struct PhotoFilterMenu: View {
             Label(showsCount && n > 0 ? "Filter (\(n))" : "Filter", systemImage: n > 0 ? "line.3.horizontal.decrease.circle.fill"
                                                                                        : "line.3.horizontal.decrease.circle")
         }
-        .help("Show photos by flag, rating or tag")
+        .help("Show photos by flag, rating, Instagram use or tag")
     }
 
     private func toggle(_ title: String, tag: Tag, match: TagMatch) -> some View {
@@ -85,6 +92,11 @@ struct PhotoFilterChips: View {
             if model.filter.minRating > 0 {
                 chip(String(repeating: "★", count: model.filter.minRating) + (model.filter.minRating < 5 ? "+" : ""), icon: nil) {
                     model.filter.minRating = 0
+                }
+            }
+            if model.filter.insta != .any {
+                chip("Instagram: \(model.filter.insta.title.lowercased())", icon: AnyView(Image(systemName: "square.on.square").font(.caption2))) {
+                    model.filter.insta = .any
                 }
             }
             ForEach(model.filter.tags, id: \.self) { c in
@@ -126,5 +138,5 @@ extension TagCondition {
 }
 
 extension PhotoFilter {
-    var conditionCount: Int { (flag == .all ? 0 : 1) + (minRating == 0 ? 0 : 1) + tags.count }
+    var conditionCount: Int { (flag == .all ? 0 : 1) + (minRating == 0 ? 0 : 1) + tags.count + (insta == .any ? 0 : 1) }
 }

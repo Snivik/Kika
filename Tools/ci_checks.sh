@@ -50,6 +50,8 @@ check decode_check "$OUT/no-raw.RW2 $OUT/decode-run" \
 
 check tags_check "$OUT/tags-run" $APP/App/FolderTree.swift
 
+check insta_check "$OUT/insta-run" $APP/Instagram/InstaModels.swift $APP/Instagram/Catalog+Insta.swift
+
 if [ ${#FAILED[@]} -gt 0 ]; then
   echo "FAILED: ${FAILED[*]}"
   exit 1

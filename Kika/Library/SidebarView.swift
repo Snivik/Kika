@@ -62,6 +62,7 @@ struct SidebarView: View {
                     if case .folder(let id) = model.sidebarItem { FolderActions.requestDelete(id, model: model) }
                 }]
             }
+            .instaPlanDeletionAlert(model: model)   // Instagram/UI/InstaPlanRow.swift
             .alert(state.pendingDeletion?.title ?? "", isPresented: Binding(
                 get: { state.pendingDeletion != nil },
                 set: { if !$0 { state.pendingDeletion = nil } }
@@ -105,6 +106,10 @@ struct SidebarView: View {
             Label("Rejected", systemImage: "flag.slash")
                 .badge(counts.flags.rejected)
                 .tag(SidebarItem.rejected)
+            if !InstaStore.shared.plans.isEmpty {
+                InstaCalendarRow()   // Instagram/UI/InstaPlanRow.swift
+                    .tag(SidebarItem.instaCalendar)
+            }
     }
 
     private var foldersSection: some View {
@@ -131,8 +136,13 @@ struct SidebarView: View {
             Button("Rename") { state.renamingFolderID = id }
             Toggle("Show Photos from Subfolders", isOn: Bindable(model).includeSubfolders)
             Menu("Tags") { FolderTagMenuItems(folderID: id, model: model) }   // Tags/UI/TagViews.swift
+            Button(InstaStore.shared.plan(forFolder: id) == nil ? "New Instagram Plan" : "Show Instagram Plan") {
+                InstaActions.showPlan(folderID: id, model: model)
+            }
             Divider()
             Button("Delete Folder…") { FolderActions.requestDelete(id, model: model) }
+        } else if case .plan(let id)? = items.first, let plan = InstaStore.shared.plan(id) {
+            InstaPlanRow.menuItems(plan, model: model)
         } else if case .tag(let id, _)? = items.first, let tag = TagStore.shared.tag(id) {
             Button("Edit Tag…") { TagStore.shared.editing = tag }
             Button("Delete Tag…") { TagStore.shared.pendingDeletion = tag }
