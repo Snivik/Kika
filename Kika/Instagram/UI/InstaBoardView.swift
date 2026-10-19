@@ -6,7 +6,7 @@
 //  grid with its filter and selection; "Instagram: Not Used" shows what's left) and the plan on the right: posts
 //  and story sets as cards, each a row of slides with title, shape, planned date, status and caption.
 //  Photos get in by dragging them onto a card (or "Add Selected" in its last slot); slides drag to reorder,
-//  also into another card. A posted card is locked.
+//  also into another card. A posted card is locked. Export: the header, a card's More menu, a slide's menu (InstaExportSheet).
 //
 
 import AppKit
@@ -84,6 +84,13 @@ struct InstaPlanView: View {
                 Label("Calendar", systemImage: "calendar")
             }
             .help("Every plan's posts and stories by date")
+            if let planID = model.selectedPlanID {
+                Button { InstaActions.exportPlan(planID, model: model) } label: {
+                    Label("Export Plan…", systemImage: "square.and.arrow.up")
+                }
+                .disabled(store.posts.allSatisfy { $0.photoIDs.isEmpty })
+                .help("Save every post and set of stories as images, each in a folder of its own")
+            }
             Button { InstaActions.newPost(.post, photoIDs: model.orderedSelection, model: model) } label: {
                 Label("Post", systemImage: "plus")
             }
@@ -218,6 +225,8 @@ struct InstaPostCard: View {
                 .disabled(store.posts.last?.id == post.id)
             Divider()
             Button("Select Photos in Grid") { InstaActions.reveal(post.photoIDs, model: model) }
+                .disabled(post.photoIDs.isEmpty)
+            Button(post.kind == .post ? "Export Post…" : "Export Stories…") { InstaActions.exportPost(post, model: model) }
                 .disabled(post.photoIDs.isEmpty)
             if post.kind == .story {
                 Menu("Add Layout Frame") {

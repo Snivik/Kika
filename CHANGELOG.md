@@ -5,6 +5,29 @@ CI builds the universal app and publishes the top section as its release notes (
 Fix releases bump the patch (0.1.0 → 0.1.1); significant new features bump the minor (→ 0.2.0).
 Newest first; written for people, not commits.
 
+## 0.5.0 — 2026-10-19
+
+**Export for Instagram**
+- Save your planned posts and stories as images ready to upload. Right-click a slide and choose Export Slide…,
+  choose Export Post… or Export Stories… in a card's ⋯ menu, or click Export Plan… above the plan (or right-click
+  the plan in the sidebar). Pick a folder and the images are saved there. Posted cards can be exported too.
+- Every photo becomes its own image, 1080 px wide, with your Develop edits and cropped exactly as you framed it on the
+  board. A single-photo slide comes out in the post's shape (1080 × 1350 for 4:5). A split gives one image per
+  carousel slide. A layout never turns into one combined picture: a frame with 3 photos gives 3 images, each in the
+  shape of its cell, so you can put them together in Instagram's own layout.
+- Each post gets a folder named after it, with the images and a post.txt: the caption exactly as you wrote it,
+  hashtags included, ready to paste, and below it the planned date and the status. Stories have no caption, so
+  their folder holds only the images.
+- Export Plan… gives every post and set of stories its own folder, numbered in board order: "01 Post 1",
+  "02 Stories 1", and so on.
+- Files are numbered in posting order: 01.jpg, 02.jpg, …, matching the slide numbers on the board. The images of one
+  slide share its number: 03-1.jpg, 03-2.jpg, … from left to right for a split, and by cell (top to bottom, left to
+  right) for a layout. They sort in that order in Finder and in upload pickers.
+- Where a photo is scaled smaller than its cell, the frame's background colour fills the rest, as on the board.
+  Narrow cells keep their shape too, so the halves of a side-by-side story frame come out tall (1080 × 3953).
+- Nothing is overwritten: exporting a post again creates "Post 1 (2)". Photos whose drive isn't connected are
+  skipped and listed when the export finishes.
+
 ## 0.4.0 — 2026-10-18
 
 **Instagram Planner**

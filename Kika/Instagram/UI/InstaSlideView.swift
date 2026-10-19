@@ -7,7 +7,8 @@
 //  Drops: photos on the left / right fifth insert new slides before / after; in the middle they fill the cell
 //  under the pointer and the ones after it (a single-photo slide is replaced). A dragged slide moves before / after.
 //  Drag the slide to move it; double-click (or Adjust Photos… in the menu) to scale, rotate and move its photos
-//  (InstaAdjustSheet). Context menu: adjust, layout, split, background, remove photo, delete slide, open in Develop.
+//  (InstaAdjustSheet). Context menu: adjust, layout, split, background, remove photo, delete slide, open in Develop,
+//  Export Slide… (InstaExportSheet).
 //
 
 import AppKit
@@ -131,6 +132,10 @@ struct InstaSlideView: View {
             .disabled(photoIDs.isEmpty)
         Button("Open in Develop") { if let id = photoIDs.first { model.openInDevelop(id) } }
             .disabled(photoIDs.isEmpty)
+        Button("Export Slide…") { InstaActions.exportSlide(slide, of: post, model: model) }
+            .disabled(photoIDs.isEmpty)
+            .help(slide.span > 1 ? "Save the \(slide.span) strips of this split as images"
+                  : photoIDs.count > 1 ? "Save each photo of this layout as its own image" : "Save this slide as an image")
         Divider()
         if slide.layout != .single {
             Menu("Remove Photo") {
