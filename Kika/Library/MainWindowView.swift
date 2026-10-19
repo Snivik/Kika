@@ -55,6 +55,7 @@ struct MainWindowView: View {
             }
             ToolbarItem {
                 PreviewActivityView()
+                    .padding(.leading, 6)   // the ring otherwise touches the toolbar capsule's edge (macOS 26)
             }
             ToolbarItem {
                 Button { model.presentedSheet = .importPhotos } label: {

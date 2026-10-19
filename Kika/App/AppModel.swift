@@ -229,6 +229,12 @@ final class AppModel {
                 focusedPhotoID = replacement
             } else if mode == .library {
                 focusedPhotoID = nil
+            } else {
+                // Develop: another source without this photo opens its first photo (none: nothing open).
+                let first = photos.first?.id
+                selection = first.map { [$0] } ?? []
+                selectionAnchorID = first
+                focusedPhotoID = first
             }
         }
         if let a = selectionAnchorID, photoIndex[a] == nil { selectionAnchorID = nil }

@@ -193,6 +193,7 @@ enum DevScript {
                 case "pointer": await CanvasPointerDevScript.run(arg)   // see Develop/Overlays/CanvasPointerDevScript.swift
                 case "tag": TagsDevScript.run(arg, model: model)   // see Tags/UI/TagsDevScript.swift
                 case "insta": InstaDevScript.run(arg, model: model)   // see Instagram/UI/InstaDevScript.swift
+                case "stuckdrag": StuckDragGuard.devCommand(arg)   // see App/StuckDragGuard.swift
                 case let c where IntegrationDevScript.commands.contains(c): IntegrationDevScript.run(c, arg, model: model)
                 case let c where StripDevScript.commands.contains(c): StripDevScript.run(c, arg, model: model)   // Library/Flags/StripDevScript.swift
                 case let c where MaskDevScript.commands.contains(c): MaskDevScript.run(c, arg, session: model.developSession)

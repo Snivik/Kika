@@ -5,6 +5,24 @@ CI builds the universal app and publishes the top section as its release notes (
 Fix releases bump the patch (0.1.0 → 0.1.1); significant new features bump the minor (→ 0.2.0).
 Newest first; written for people, not commits.
 
+## 0.4.1 — 2026-10-19
+
+- Skimming through photos with the arrow keys in Develop or Full Screen Preview no longer leaves a backlog of
+  renders behind you. Photos you pass show their cached preview. Only the photo you stop on is read and rendered
+  in full, and it starts right away instead of waiting its turn. A new setting, **Full preview delay** (Settings →
+  Previews, 0.5 s by default), sets how long you have to stay on a photo before it renders in full. (#1)
+- The Adjust Photos sheet now fits inside a small window. Before, its Cancel and Done buttons could hang off the
+  bottom edge. (#4)
+- The preview progress ring in the toolbar no longer touches the edge of its capsule. (#3)
+- Switching folders in the Library grid starts the new folder at the top, with the selected photo scrolled into
+  view. This should stop the day header (By Date) from showing up over the middle of the first row. (#6)
+- In Develop, choosing a folder that doesn't contain the open photo now opens that folder's first photo, instead of
+  leaving the old photo on screen. (#7)
+- A drag that never finished (seen on the Instagram board) could leave an invisible window over the screen, so
+  left clicks stopped working anywhere in Кика until another drag. Кика now notices this on your next click and
+  removes that window: one click does nothing, then everything works again. Each time it happens it's logged, to
+  help find the cause. (#2)
+
 ## 0.4.0 — 2026-10-18
 
 **Instagram Planner**

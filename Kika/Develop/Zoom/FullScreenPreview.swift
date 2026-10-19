@@ -13,6 +13,8 @@
 //
 //  Rendering: the cached standard preview shows at once, then a render at screen resolution
 //  (RenderPipeline, off-main); the neighbours in the direction of travel are pre-rendered.
+//  While skimming (← / → faster than the full preview delay) the render waits for that delay
+//  and is cancelled by the next photo.
 //  Zoomed tiles come from its own ZoomController / RegionRenderer.
 //
 
@@ -50,6 +52,11 @@ final class FullScreenPreview {
     @ObservationIgnored private var sourceOrder: [Int64] = []
     @ObservationIgnored private var currentSource: RenderSource?
     @ObservationIgnored private var currentSettings = EditSettings()
+    /// Placeholder request + render of the photo shown; the next photo cancels them before they
+    /// start, so skimming renders only where you stop (Previews/SkimDetector.swift).
+    @ObservationIgnored private var placeholderTask: Task<Void, Never>?
+    @ObservationIgnored private var renderTask: Task<Void, Never>?
+    @ObservationIgnored private let skim = SkimDetector()
 
     private struct CacheKey: Hashable {
         let photoID: Int64
@@ -109,6 +116,8 @@ final class FullScreenPreview {
         zoom.purge()
         zoom.window = nil
         generation += 1
+        placeholderTask?.cancel()
+        renderTask?.cancel()
         cache.removeAll(); cacheOrder.removeAll()
         sources.removeAll(); sourceOrder.removeAll()
         currentSource = nil
@@ -173,7 +182,10 @@ final class FullScreenPreview {
         let (settings, knownSource) = editState(for: photo)
         let size = screenPixelSize
         let key = CacheKey(photoID: id, settings: settings.jsonString() ?? "", size: size)
-        if photoID != id { zoom.setInputs(nil) }
+        let isNewPhoto = photoID != id
+        if isNewPhoto { zoom.setInputs(nil) }
+        placeholderTask?.cancel()
+        renderTask?.cancel()
         photoID = id
         currentSettings = settings
         currentSource = knownSource
@@ -186,7 +198,7 @@ final class FullScreenPreview {
                 ?? PreviewService.shared.cachedImage(for: photo, level: .thumbnail)
             isPlaceholder = true
             if image == nil {
-                Task { [weak self] in
+                placeholderTask = Task { [weak self] in
                     let preview = await PreviewService.shared.image(for: photo, level: .standard)
                     guard let self, self.generation == gen, self.image == nil else { return }
                     self.image = preview
@@ -196,7 +208,11 @@ final class FullScreenPreview {
         updateZoomInputs()
         let catalog = model.catalog
         let needsRender = cache[key] == nil
-        Task.detached(priority: .userInitiated) { [weak self] in
+        // Live edits of the shown photo render at once; a new photo waits while skimming.
+        let delay = isNewPhoto && needsRender ? skim.delayForOpen() : .zero
+        renderTask = Task.detached(priority: .userInitiated) { [weak self] in
+            if delay > .zero { try? await Task.sleep(for: delay) }
+            if Task.isCancelled { return }
             let source = knownSource ?? RenderPipeline.makeSource(url: SecurityScopeManager.shared.accessibleURL(for: photo, catalog: catalog))
             var cg: CGImage?
             var ms = 0.0

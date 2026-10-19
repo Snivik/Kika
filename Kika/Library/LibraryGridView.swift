@@ -32,6 +32,7 @@ struct LibraryGridView: View {
                 GeometryReader { geo in
                     grid(columns: columnCount(width: geo.size.width))
                 }
+                .onAppear { isGridFocused = true }   // not per source: a sidebar click keeps its focus
             }
         }
         .safeAreaInset(edge: .top, spacing: 0) { GridFilterBar() }
@@ -73,6 +74,9 @@ struct LibraryGridView: View {
                 }
                 .padding(padding)
             }
+            // A fresh scroll view per source / grouping: macOS 26 can keep the old scroll offset for
+            // the pinned day headers after the content shrinks, drawing a header over the first row (#6).
+            .id(GridScrollIdentity(source: model.selectedSource, grouped: !model.dateSections.isEmpty))
             .photoDragOperations()
             .focusable()
             .focused($isGridFocused)
@@ -85,7 +89,6 @@ struct LibraryGridView: View {
                 withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(id) }
             }
             .onAppear {
-                isGridFocused = true
                 if let id = model.focusedPhotoID { proxy.scrollTo(id, anchor: .center) }
             }
         }
@@ -234,6 +237,11 @@ struct LibraryGridView: View {
             }
         }
     }
+}
+
+private struct GridScrollIdentity: Hashable {
+    let source: PhotoSource
+    let grouped: Bool
 }
 
 /// State the grid's key handlers share with the view (focus, column count for ↑ / ↓, the

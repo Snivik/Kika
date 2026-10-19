@@ -24,6 +24,7 @@ struct PreviewSettingsView: View {
     @AppStorage(PreviewSettings.Keys.useEmbeddedPreviews) private var useEmbedded = PreviewSettings().useEmbeddedPreviews
     @AppStorage(PreviewSettings.Keys.maxCacheGB) private var maxCacheGB = PreviewSettings().maxCacheGB
     @AppStorage(PreviewSettings.Keys.recentRenderCount) private var recentRenderCount = PreviewSettings().recentRenderCount
+    @AppStorage(PreviewSettings.Keys.fullPreviewDelay) private var fullPreviewDelay = PreviewSettings().fullPreviewDelay
 
     @State private var usage: Int64?
     @State private var recentUsage: (count: Int, bytes: Int64)?
@@ -53,6 +54,11 @@ struct PreviewSettingsView: View {
                     Toggle("Use embedded camera previews for unedited photos", isOn: $useEmbedded)
                         .help("Much faster: the camera's own JPEG inside the RAW is used until a photo is edited")
                         .accessibilityLabel("Use embedded camera previews for unedited photos")
+                    Picker("Full preview delay", selection: $fullPreviewDelay) {
+                        ForEach(PreviewSettings.fullPreviewDelays, id: \.value) { Text($0.title).tag($0.value) }
+                    }
+                    .help("When skimming through photos in Develop or full screen, only a photo you stay on this long gets its full render. Photos you pass show their cached preview.")
+                    .accessibilityLabel("Full preview delay")
                 }
                 Section {
                     LabeledContent("Keep last rendered photos") {
@@ -122,6 +128,7 @@ struct PreviewSettingsView: View {
         .onChange(of: thumbnailSize) { settingsChanged() }
         .onChange(of: quality) { settingsChanged() }
         .onChange(of: useEmbedded) { settingsChanged() }
+        .onChange(of: fullPreviewDelay) { settingsChanged() }
         .onChange(of: maxCacheGB) { settingsChanged(); refreshUsage(after: 0.5) }
         .onChange(of: recentRenderCount) { settingsChanged(); refreshUsage(after: 0.5) }
         // Refresh the size while jobs run / after cleaning.

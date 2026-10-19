@@ -400,7 +400,10 @@ extension View {
         background(WindowReader { window in
             if let window { ShortcutDispatcher.shared.mainWindow = window }
         })
-        .onAppear { ShortcutDispatcher.shared.install(model: model) }
+        .onAppear {
+            ShortcutDispatcher.shared.install(model: model)
+            StuckDragGuard.install()   // App/StuckDragGuard.swift
+        }
     }
 }
 

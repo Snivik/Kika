@@ -52,6 +52,13 @@ struct InstaAdjustSheet: View {
         slide.layout.cellRects(in: frameSize, gap: slide.layout == .single ? 0 : slide.gap)
     }
 
+    /// Up to 1100 × 860, but never larger than the main window's content area: a sheet taller than
+    /// its window hangs over the window's bottom edge (the canvas scales to whatever it gets).
+    private var fitting: CGSize {
+        let area = ShortcutDispatcher.shared.mainWindow?.contentLayoutRect.size ?? CGSize(width: 1280, height: 900)
+        return CGSize(width: max(480, min(1100, area.width - 60)), height: max(400, min(860, area.height - 30)))
+    }
+
     private enum Mode { case move, scale, rotate }
     private struct Interaction {
         var mode: Mode
@@ -71,7 +78,8 @@ struct InstaAdjustSheet: View {
             Divider()
             footer
         }
-        .frame(minWidth: 980, idealWidth: 1100, minHeight: 760, idealHeight: 860)
+        .frame(minWidth: min(720, fitting.width), idealWidth: fitting.width, maxWidth: fitting.width,
+               minHeight: min(520, fitting.height), idealHeight: fitting.height, maxHeight: fitting.height)
         .onAppear {
             guard !loaded else { return }
             loaded = true

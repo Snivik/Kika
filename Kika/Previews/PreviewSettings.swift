@@ -22,11 +22,15 @@ nonisolated struct PreviewSettings: Sendable, Equatable {
     var maxCacheGB = 10
     /// Develop: keep the last N full-quality renders ready (`RecentRenders`); 0 = off.
     var recentRenderCount = RecentRenders.defaultLimit
+    /// Seconds a photo must stay on screen while skimming (Develop / Full Screen Preview) before its
+    /// full decode + render starts; photos passed sooner only get their cached preview. 0 = off.
+    var fullPreviewDelay = 0.5
 
     static let standardSizes = [1024, 1440, 2048, 2560, 2880, 3840]
     static let thumbnailSizes = [256, 384, 512]
     static let qualities: [(title: String, value: Double)] = [("Low", 0.5), ("Medium", 0.7), ("High", 0.85)]
     static let maxCacheOptions = [2, 5, 10, 20, 0]
+    static let fullPreviewDelays: [(title: String, value: Double)] = [("Off", 0), ("0.25 s", 0.25), ("0.5 s", 0.5), ("1 s", 1)]
 
     enum Keys {
         static let standardSize = "previews.standardSize"
@@ -35,6 +39,7 @@ nonisolated struct PreviewSettings: Sendable, Equatable {
         static let useEmbeddedPreviews = "previews.useEmbeddedPreviews"
         static let maxCacheGB = "previews.maxCacheGB"
         static let recentRenderCount = "previews.recentRenderCount"
+        static let fullPreviewDelay = "previews.fullPreviewDelay"
     }
 
     static func load(from defaults: UserDefaults = .standard) -> PreviewSettings {
@@ -45,6 +50,7 @@ nonisolated struct PreviewSettings: Sendable, Equatable {
         if let v = defaults.object(forKey: Keys.useEmbeddedPreviews) as? Bool { s.useEmbeddedPreviews = v }
         if let v = defaults.object(forKey: Keys.maxCacheGB) as? Int, v >= 0 { s.maxCacheGB = v }
         if let v = defaults.object(forKey: Keys.recentRenderCount) as? Int { s.recentRenderCount = min(max(v, 0), RecentRenders.maxLimit) }
+        if let v = defaults.object(forKey: Keys.fullPreviewDelay) as? Double { s.fullPreviewDelay = min(max(v, 0), 2) }
         return s
     }
 

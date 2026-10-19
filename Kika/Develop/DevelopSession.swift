@@ -117,6 +117,11 @@ final class DevelopSession {
     private var pendingQuality: RenderQuality?
     private var lastRenderRequest = Date.distantPast
     private var finalRenderTask: Task<Void, Never>?
+    /// Placeholder preview request and RAW decode of `load()`; cancelled by `close()`, so photos
+    /// skimmed past don't keep their work queued (Previews/SkimDetector.swift).
+    private var placeholderTask: Task<Void, Never>?
+    private var sourceTask: Task<Void, Never>?
+    private static let skim = SkimDetector()
     /// What the current `renderedImage` shows (skip identical re-renders).
     private var renderedKey: RenderKey?
 
@@ -148,12 +153,16 @@ final class DevelopSession {
             ?? PreviewService.shared.cachedImage(for: photo, level: .thumbnail) {
             setPlaceholder(cached)
         } else {
-            Task { [weak self] in
+            placeholderTask = Task { [weak self] in
                 let preview = await PreviewService.shared.image(for: photo, level: .standard)
                 if let preview { self?.setPlaceholder(preview) }
             }
         }
-        Task.detached(priority: .userInitiated) { [weak self] in
+        // Skimming: decode only once the photo stayed on screen for the full preview delay.
+        let delay = Self.skim.delayForOpen()
+        sourceTask = Task.detached(priority: .userInitiated) { [weak self] in
+            if delay > .zero { try? await Task.sleep(for: delay) }
+            if Task.isCancelled { return }
             DevelopKernels.warmUp()
             let url = SecurityScopeManager.shared.accessibleURL(for: photo, catalog: catalog)
             let source = RenderPipeline.makeSource(url: url)
@@ -356,6 +365,8 @@ final class DevelopSession {
         isClosed = true
         undoGroupTask?.cancel()
         finalRenderTask?.cancel()
+        placeholderTask?.cancel()
+        sourceTask?.cancel()
         // Drop this photo's cached intermediates (decoded RAW etc.).
         RenderPipeline.interactiveContext.clearCaches()
     }

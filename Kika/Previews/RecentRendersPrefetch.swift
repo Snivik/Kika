@@ -10,6 +10,8 @@
 //  - the RAW file of the next photo is read ahead at background priority into the OS file cache
 //    (one file at a time; a newer request cancels an older one), so its decode doesn't wait for
 //    the external drive.
+//  - both wait for `PreviewSettings.fullPreviewDelay` and are skipped if another photo opened
+//    meanwhile (skimming queues nothing).
 //  Memory stays bounded by the caches' own limits (RecentRenders LRU, PreviewService NSCache).
 //
 
@@ -48,7 +50,10 @@ nonisolated final class RecentRendersPrefetch: @unchecked Sendable {
 
         let order = [index + dir, index - dir, index + 2 * dir].filter { photos.indices.contains($0) }
         let neighbours = order.map { photos[$0] }
-        DispatchQueue.global(qos: .utility).async {
+        // Skimming: warm up only the neighbours of the photo the user stops on.
+        let delay = PreviewService.shared.settings.fullPreviewDelay
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + delay) { [weak self] in
+            guard let self, self.isCurrent(gen) else { return }
             for photo in neighbours {
                 let hash = RecentRenderKey.settingsHash(photo.editSettings)
                 if !RecentRenders.shared.prefetch(photoID: photo.id, settingsHash: hash),
@@ -57,14 +62,19 @@ nonisolated final class RecentRendersPrefetch: @unchecked Sendable {
                 }
             }
         }
-        if let next = neighbours.first { readAhead(next, generation: gen) }
+        if let next = neighbours.first { readAhead(next, generation: gen, after: max(0.25, delay)) }
+    }
+
+    private func isCurrent(_ gen: Int) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return generation == gen
     }
 
     /// Reads the file sequentially (1 MB chunks, background QoS) so it lands in the OS file cache.
-    private func readAhead(_ photo: Photo, generation gen: Int) {
+    private func readAhead(_ photo: Photo, generation gen: Int, after delay: Double) {
         guard let catalog = PreviewService.shared.catalog else { return }
         // Give the photo being opened a head start on the drive.
-        readQueue.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+        readQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self else { return }
             let url = SecurityScopeManager.shared.accessibleURL(for: photo, catalog: catalog)
             self.lock.lock()
