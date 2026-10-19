@@ -18,6 +18,9 @@
 //    insta filter <any|unused|used>        the Instagram filter of the pool
 //    insta calendar [both|post|story] | insta month <YYYY-MM>   show the calendar (filter) / a month
 //    insta open <n>                        open the n-th of every plan's posts on its board (as a calendar click)
+//    insta export slide <post> <slide> <folder> | insta export post <post> <folder> | insta export plan <folder>
+//                                          export into a folder (no open panel; the sheet shows progress)
+//    insta export wait | dump | close      wait for it to finish (max 5 min) / print the result / close the sheet
 //    insta dump                            plans, posts, slides, usage
 //
 
@@ -25,7 +28,7 @@
 import Foundation
 
 enum InstaDevScript {
-    static func run(_ arg: String, model: AppModel) {
+    static func run(_ arg: String, model: AppModel) async {
         let p = arg.split(separator: " ").map(String.init)
         let store = InstaStore.shared
         store.load(model.catalog)   // commands run back to back; `.insta` notifications arrive async
@@ -103,6 +106,8 @@ enum InstaDevScript {
                 if let d = f.date(from: p[1]) { store.calendarMonth = d }
             case "filter" where p.count >= 2:
                 model.filter.insta = InstaUseFilter(rawValue: p[1]) ?? .any
+            case "export" where p.count >= 2:
+                await export(Array(p.dropFirst()), model: model, post: post, slide: slide)
             case "dump":
                 print("insta plans: \(store.plans.map { "#\($0.id) folder \($0.folderID)" }) shown \(store.shownPlanID.map(String.init) ?? "none")")
                 for (i, t) in store.posts.enumerated() {
@@ -121,6 +126,33 @@ enum InstaDevScript {
             }
         } catch {
             model.report(error)
+        }
+    }
+
+    private static func export(_ p: [String], model: AppModel, post: (String) -> InstaPost?, slide: (InstaPost, String) -> InstaSlide?) async {
+        let c = InstaExportController.shared
+        func folder(_ from: Int) -> URL { URL(fileURLWithPath: p.dropFirst(from).joined(separator: " "), isDirectory: true) }
+        switch p[0] {
+        case "slide" where p.count >= 4:
+            guard let t = post(p[1]), let s = slide(t, p[2]) else { return print("DevScript insta: bad export slide args") }
+            c.start(.slide(s.id), name: "\(t.title), slide \(p[2])", destination: folder(3), catalog: model.catalog)
+        case "post" where p.count >= 3:
+            guard let t = post(p[1]) else { return print("DevScript insta: no post \(p[1])") }
+            c.start(.post(t.id), name: t.title, destination: folder(2), catalog: model.catalog)
+        case "plan" where p.count >= 2:
+            guard let id = InstaStore.shared.shownPlanID else { return print("DevScript insta: no plan shown") }
+            let folderID = InstaStore.shared.plan(id)?.folderID
+            c.start(.plan(id), name: model.folders.first { $0.id == folderID }?.name ?? "plan", destination: folder(1), catalog: model.catalog)
+        case "wait":
+            for _ in 0..<3000 where c.phase == .exporting { try? await Task.sleep(for: .milliseconds(100)) }
+            print("DevScript insta: export \(c.result?.summary ?? "not finished")")
+        case "dump":
+            print("DevScript insta: export phase=\(c.phase) progress=\(c.progress.done)/\(c.progress.total) dest=\(c.destination?.path ?? "nil")")
+            for f in c.result?.files ?? [] { print("DevScript insta:   \(f.path)") }
+            for s in c.result?.skipped ?? [] { print("DevScript insta:   skipped \(s.fileName) (\(s.photoName)): \(s.reason)") }
+            if let e = c.result?.stopError { print("DevScript insta:   stopped: \(e)") }
+        case "close": c.close()
+        default: print("DevScript insta: unknown export \(p.joined(separator: " "))")
         }
     }
 }

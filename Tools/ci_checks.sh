@@ -52,6 +52,10 @@ check tags_check "$OUT/tags-run" $APP/App/FolderTree.swift
 
 check insta_check "$OUT/insta-run" $APP/Instagram/InstaModels.swift $APP/Instagram/Catalog+Insta.swift
 
+# Draws its own test photos.
+check insta_export_check "$OUT/insta-export-run" $APP/Instagram/InstaModels.swift $APP/Instagram/Catalog+Insta.swift \
+  $APP/Instagram/InstaExport.swift $APP/Export/ExportEngine.swift $APP/Develop/Crop/CropMath.swift
+
 if [ ${#FAILED[@]} -gt 0 ]; then
   echo "FAILED: ${FAILED[*]}"
   exit 1

@@ -3,7 +3,7 @@
 //  Kika
 //
 //  A folder's Instagram plan in the sidebar: the first child row under its folder (FolderOutline). Selecting it
-//  shows the plan board with the folder's photos to pick from. Context menu: new post / stories, delete
+//  shows the plan board with the folder's photos to pick from. Context menu: new post / stories, export, delete
 //  (confirmed; photos are never touched).
 //
 
@@ -23,6 +23,9 @@ struct InstaPlanRow: View {
     static func menuItems(_ plan: InstaPlan, model: AppModel) -> some View {
         Button("New Post") { show(plan, model: model); InstaActions.newPost(.post, model: model) }
         Button("New Stories") { show(plan, model: model); InstaActions.newPost(.story, model: model) }
+        Divider()
+        Button("Export Plan…") { InstaActions.exportPlan(plan.id, model: model) }
+            .disabled(!InstaActions.planHasPhotos(plan.id))
         Divider()
         Button("Delete Instagram Plan…") { InstaStore.shared.pendingPlanDeletion = plan }
     }

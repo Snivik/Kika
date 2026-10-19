@@ -135,6 +135,29 @@ enum InstaActions {
         update(post, model: model)
     }
 
+    // MARK: Export (InstaExportSheet.swift)
+
+    static func exportSlide(_ slide: InstaSlide, of post: InstaPost, model: AppModel) {
+        let n = (post.slides.firstIndex { $0.id == slide.id } ?? 0) + 1
+        InstaExportController.shared.export(.slide(slide.id), name: "\(post.title), slide \(n)", model: model)
+    }
+
+    static func exportPost(_ post: InstaPost, model: AppModel) {
+        InstaExportController.shared.export(.post(post.id), name: post.title, model: model)
+    }
+
+    /// The whole plan, named after its folder.
+    static func exportPlan(_ planID: Int64, model: AppModel) {
+        let folderID = store.plan(planID)?.folderID
+        let name = model.folders.first { $0.id == folderID }?.name ?? "Instagram"
+        InstaExportController.shared.export(.plan(planID), name: name, model: model)
+    }
+
+    /// Whether any post or story set of the plan has a photo (something to export).
+    static func planHasPhotos(_ planID: Int64) -> Bool {
+        store.allPosts.contains { $0.planID == planID && !$0.photoIDs.isEmpty }
+    }
+
     /// Selects the photos of a slide (or a whole post) in the pool grid.
     static func reveal(_ photoIDs: [Int64], model: AppModel) {
         let shown = photoIDs.filter { model.index(of: $0) != nil }
