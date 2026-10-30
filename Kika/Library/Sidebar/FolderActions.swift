@@ -71,31 +71,39 @@ extension AppModel {
             showsInstaCalendar = true   // over whatever source is shown (it doesn't change)
         case .plan(let id):
             guard let plan = InstaStore.shared.plan(id) else { return }
-            if leavingSmartSource { filter = PhotoFilter() }
+            if leavingSmartSource { resetFilter() }
             selectedPlanID = id
             selectedSource = .folder(id: plan.folderID, includeSubfolders: includeSubfolders)
         case .picked, .rejected:
-            filter = PhotoFilter(flag: item == .picked ? .picked : .rejected)
+            resetFilter(PhotoFilter(flag: item == .picked ? .picked : .rejected))
             selectedSource = .all
         case .tag(let id, let match):
-            filter = PhotoFilter(tags: [TagCondition(tagID: id, match: match)])
+            resetFilter(PhotoFilter(tags: [TagCondition(tagID: id, match: match)]))
             selectedSource = .all
         case .all:
-            if leavingSmartSource { filter = PhotoFilter() }
+            if leavingSmartSource { resetFilter() }
             selectedSource = .all
         case .lastImport:
-            if leavingSmartSource { filter = PhotoFilter() }
+            if leavingSmartSource { resetFilter() }
             selectedSource = .lastImport
         case .folder(let id):
-            if leavingSmartSource { filter = PhotoFilter() }
+            if leavingSmartSource { resetFilter() }
             selectedSource = .folder(id: id, includeSubfolders: includeSubfolders)
         case .date(let year, let month):
-            if leavingSmartSource { filter = PhotoFilter() }
+            if leavingSmartSource { resetFilter() }
             selectedSource = .captureDate(year: year, month: month)
         case .undated:
-            if leavingSmartSource { filter = PhotoFilter() }
+            if leavingSmartSource { resetFilter() }
             selectedSource = .undated
         }
+    }
+
+    /// Replaces the filter (smart sidebar rows), keeping the Device scope: it's where you are working
+    /// (e.g. only this Mac while the photo drive is at home), not part of the row.
+    private func resetFilter(_ new: PhotoFilter = PhotoFilter()) {
+        var new = new
+        new.device = filter.device
+        filter = new
     }
 
     /// The folder shown in the grid, if any.
@@ -154,6 +162,22 @@ enum FolderActions {
         do {
             try model.catalog.moveFolder(id: id, toParent: destination.parentID, index: destination.index)
             if let parent = destination.parentID { state.reveal(parent, in: model.folders) }
+        } catch {
+            model.report(error)
+        }
+    }
+
+    /// Context menu "Move To ▸": appends the folder under `parent` (nil = top level).
+    static func move(_ id: Int64, toParent parent: Int64?, model: AppModel) {
+        guard let dest = FolderDropPlanner.menuDestination(moving: id, toParent: parent, folders: model.folders) else { return }
+        move(id, to: dest, model: model)
+    }
+
+    /// Folder context menu "Move Photos to Device…": every photo of the folder and its subfolders.
+    static func moveToDevice(_ id: Int64, model: AppModel) {
+        do {
+            let ids = try model.catalog.photos(in: .folder(id: id, includeSubfolders: true)).map(\.id)
+            DeviceMoveController.shared.present(ids: ids, model: model)
         } catch {
             model.report(error)
         }

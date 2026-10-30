@@ -114,6 +114,7 @@ final class AppModel {
         Self.loadDecodeProfiles(catalog)
         TagStore.shared.load(catalog)
         InstaStore.shared.load(catalog)
+        DeviceStore.shared.load(catalog)
         PreviewService.shared.configure(catalog: catalog)
         observeCatalog()
         reloadFolders()
@@ -155,6 +156,7 @@ final class AppModel {
         TagStore.shared.load(newCatalog)
         selectedPlanID = nil
         InstaStore.shared.load(newCatalog)
+        DeviceStore.shared.load(newCatalog)
         PreviewService.shared.configure(catalog: newCatalog)
         observeCatalog()
         selectedSource = .all

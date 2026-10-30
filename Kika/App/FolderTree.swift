@@ -47,6 +47,13 @@ nonisolated enum FolderTree {
         return (prune(roots), matching)
     }
 
+    /// The tree without `id` and its subfolders (the places a folder can be moved to).
+    static func removingSubtree(_ id: Int64, from roots: [FolderNode]) -> [FolderNode] {
+        roots.compactMap { node in
+            node.id == id ? nil : FolderNode(folder: node.folder, children: removingSubtree(id, from: node.children))
+        }
+    }
+
     /// Ids of `id` and all descendants within `folders`.
     static func subtreeIDs(of id: Int64, in folders: [Folder]) -> Set<Int64> {
         let byParent = Dictionary(grouping: folders) { $0.parentID }

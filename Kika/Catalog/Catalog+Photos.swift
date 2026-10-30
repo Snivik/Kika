@@ -162,6 +162,12 @@ nonisolated extension Catalog {
             }
         }
 
+        if let device = filter.device {
+            let (clause, deviceArgs) = device.sqlCondition(column: "p.path")
+            conditions.append(clause)
+            args += deviceArgs
+        }
+
         if !conditions.isEmpty { sql += " WHERE " + conditions.joined(separator: " AND ") }
         if case .folder(_, true) = source { sql += " GROUP BY p.id" }
 

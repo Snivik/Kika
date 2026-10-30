@@ -25,7 +25,7 @@ nonisolated enum PhotoActionID: String, CaseIterable, Sendable, Hashable {
     case pick, unflag, reject
     case copySettings, pasteSettings, pasteSettingsChoose, syncSettings, bulkCrop, resetEdits
     case addToFolder, moveToFolder, copyToFolder, newFolderWithPhotos, newFolderWithVirtualCopies, removeFromFolder
-    case exportJPEG
+    case exportJPEG, moveToDevice
     case removeFromCatalog
 }
 
@@ -216,6 +216,9 @@ nonisolated struct PhotoActionSpec: Sendable, Identifiable {
         PhotoActionSpec(.exportJPEG, "Export JPEG…", count: { "Export \(photos($0))…" }, symbol: "square.and.arrow.up",
                         help: "Export full-resolution JPEGs with the edits", arity: .multiple,
                         shortcut: .exportPhotos, group: .export, menuBar: false),
+        PhotoActionSpec(.moveToDevice, "Move to Device…", count: { "Move \(photos($0)) to Device…" }, symbol: "externaldrive",
+                        help: "Move the files to another drive, NAS or folder (copied and checked first); edits, folders and tags stay",
+                        arity: .multiple, group: .export),
 
         PhotoActionSpec(.removeFromCatalog, "Remove from Catalog…", symbol: "trash",
                         help: "Remove from the catalog (asks first). The files on disk are not deleted",

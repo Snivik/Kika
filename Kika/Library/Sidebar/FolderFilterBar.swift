@@ -5,7 +5,8 @@
 //  Folder filter (like Xcode's navigator filter): a name field as the first row of the sidebar's Folders
 //  section, and a tag menu in the Folders header (`FolderTagFilterMenu`). While it filters, the Folders section shows the matching folders with their parents (dimmed,
 //  for context), every group expanded. Tag conditions use effective values, like the photo filter
-//  (`TagValues.satisfies`). Esc in the field clears the text.
+//  (`TagValues.satisfies`). Esc in the field clears the text. The Device filter is the photo filter's
+//  (`model.filter.device`): it keeps folders that directly hold photos on that device.
 //
 
 import SwiftUI
@@ -50,12 +51,13 @@ struct FolderTagFilterMenu: View {
                     Label { Text(tag.name) } icon: { TagMenuIcon(color: tag.color) }
                 }
             }
+            DeviceFilterSection()   // Tags/UI/PhotoFilterControls.swift
             Divider()
             Button("New Tag…") { TagActions.newTag(model: model, forFolders: true) }
-            Button("Clear Filter") { state.filterText = ""; state.filterTags = [] }
-                .disabled(!state.isFiltering)
+            Button("Clear Filter") { state.filterText = ""; state.filterTags = []; model.filter.device = nil }
+                .disabled(!state.isFiltering && model.filter.device == nil)
         } label: {
-            Image(systemName: state.filterTags.isEmpty ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
+            Image(systemName: state.filterTags.isEmpty && model.filter.device == nil ? "line.3.horizontal.decrease.circle" : "line.3.horizontal.decrease.circle.fill")
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -74,22 +76,26 @@ struct FolderTagFilterMenu: View {
     }
 
     private var tagHelp: String {
-        let active = state.filterTags.compactMap { c in store.tag(c.tagID).map { c.title($0) } }
-        return active.isEmpty ? "Show folders with a tag" : "Showing folders with: " + active.joined(separator: ", ")
+        var active = state.filterTags.compactMap { c in store.tag(c.tagID).map { c.title($0) } }
+        if let device = model.filter.device { active.append("photos on \(device.title)") }
+        return active.isEmpty ? "Show folders with a tag, or with photos on a device" : "Showing folders with: " + active.joined(separator: ", ")
     }
 }
 
 extension FolderSidebarState {
     /// The folder tree for the sidebar: everything, or the filter's matches with their parents.
+    /// `device`: only folders directly holding photos on it (the photo filter's Device).
     @MainActor
-    func visibleTree(_ roots: [FolderNode]) -> (nodes: [FolderNode], matching: Set<Int64>?) {
-        guard isFiltering else { return (roots, nil) }
+    func visibleTree(_ roots: [FolderNode], device: PhotoDevice? = nil) -> (nodes: [FolderNode], matching: Set<Int64>?) {
+        guard isFiltering || device != nil else { return (roots, nil) }
         let text = filterText.trimmingCharacters(in: .whitespaces)
         let values = TagStore.shared.folderValues
         let conditions = filterTags
+        let onDevice = device.map { DeviceStore.shared.foldersByDevice[$0] ?? [] }
         let result = FolderTree.filtered(roots) { folder in
             (text.isEmpty || folder.name.localizedCaseInsensitiveContains(text))
                 && conditions.allSatisfy { (values[folder.id]?[$0.tagID]).satisfies($0.match) }
+                && onDevice?.contains(folder.id) != false
         }
         return (result.nodes, result.matching)
     }

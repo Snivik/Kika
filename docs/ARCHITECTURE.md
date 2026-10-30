@@ -53,6 +53,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Kik
 | `Shortcuts/*` | keyboard shortcut registry (`ShortcutModel`, `ShortcutStore`), dispatcher + menu items (`ShortcutKeys`), Settings > Keyboard, tooltip helpers (`SegmentHelp`), DevScript |
 | `CatalogTransfer/*` | Export Catalog / Import Catalog (engine `CatalogTransfer.swift`; controller, sheet + `CatalogTransferCommands`, DevScript) |
 | `VirtualCopies/*` | virtual copies: catalog API (`Catalog+VirtualCopies.swift`), preview seeding (`VirtualCopyPreviews`), actions / badge / rename alert (`VirtualCopyActions`), drop verbs (`PhotoDropVerb`), DevScript `vc …` |
+| `Devices/*` | devices (where files live) and Move to Device: catalog API (`Catalog+Devices`: summaries, folders per device, `relocatePhotos`), copy-verify-relocate job (`DeviceMove`); `Devices/UI/`: `DeviceStore`, sheet + controller, DevScript `device …`. `PhotoDevice` itself is in `Catalog/` (`PhotoFilter.device`) |
 | `Actions/*` | photo actions primitive: registry (`PhotoActionSpec` UI-free + `PhotoActions`), every menu surface (`PhotoActionMenus`), bulk edits with one undo step (`BulkEditor`, engine `Catalog+BulkEdits`), Bulk Crop (`BulkCrop` math + sheet), Paste / Sync section checklist (`EditSections`, `SettingsSectionsSheet`), window UI (`PhotoActionUI`), DevScript `act …` |
 
 Conventions: new catalog API as `nonisolated extension Catalog` in the feature's own
@@ -119,7 +120,7 @@ func allFolders() throws -> [Folder]                             // flat; build 
 func folder(id: Int64) throws -> Folder?
 func createFolder(name: String, parentID: Int64? = nil, lrCollectionID: Int64? = nil) throws -> Int64
 func renameFolder(id: Int64, to name: String) throws
-func moveFolder(id: Int64, toParent: Int64?, index: Int? = nil) throws   // throws CatalogError.folderCycle
+func moveFolder(id: Int64, toParent: Int64?, index: Int? = nil) throws   // throws CatalogError.folderCycle (UI: drag, or folder menu Move To ▸)
 func deleteFolder(id: Int64) throws                              // cascades subfolders + memberships
 func folderSubtreeIDs(_ id: Int64) throws -> [Int64]
 func addPhotos(_ ids: some Collection<Int64>, toFolder: Int64) throws    // appends, ignores duplicates
@@ -208,6 +209,33 @@ Your own extension methods should call `postChange(_:)` too. `AppModel` coalesce
 (`.roots` reloads photos too: root ids change when a granted parent folder replaces inner roots).
 `PreviewService` also observes `.roots`: it clears `SecurityScopeManager` failures and bumps the
 `PreviewJobs` revision of photos that were offline, so their thumbnails retry without a restart.
+
+## Devices (`Devices/`, `Catalog/PhotoDevice.swift`, harness `Tools/devices_check.swift`)
+
+- **`PhotoDevice`** = where a file lives: `.thisMac` (any path not under `/Volumes/`) or `.volume(name)`
+  (`/Volumes/<name>`: drive, NAS share, card). Derived from the photo's path, **never stored**, so it can't
+  disagree with the path after Move to Device / Relink. SQL: `sqlCondition(column:)` uses byte ranges
+  (`path >= '/Volumes/T9/' AND path < '/Volumes/T90'`), not LIKE; `sqlVolumeName(column:)` for GROUP BY.
+- **Filter:** `PhotoFilter.device` (grid query) also scopes the folder list (`FolderSidebarState.visibleTree(_:device:)`:
+  folders directly holding photos on it, parents dimmed). One value for both: the Device section of the photo Filter
+  menu and of the Folders filter menu (`DeviceFilterSection`), chip "On T9". Sidebar navigation keeps it
+  (`AppModel.resetFilter`); Show All Photos clears it. Sidebar counts stay catalog-wide.
+- **`DeviceStore`** (MainActor): `deviceSummaries()` (files = masters, bytes), `folderIDsByDevice()`, mounted
+  volumes; reloads off-main on `.photosInsertedOrRemoved` / `.roots` / `.folders` / `.folderMembership` and on
+  NSWorkspace mount / unmount / rename.
+- **Move to Device** (`DeviceMoveJob`, off-main; sheet `DeviceMoveSheet` from the photo action `moveToDevice`
+  and the folder menu "Move Photos to Device…"): per master (virtual copies stand for their master's file):
+  skip if the file isn't reachable (`notConnected` / `missing`) → target = destination + `DeviceMoveLayout`
+  (YYYY/YYYY-MM-DD, YYYY-MM-DD by capture date else import date; Same Folders = relative to the covering root;
+  flat) → `alreadyThere` if same path or same inode (case-only spelling: never trash it) → an identical file at
+  the target is adopted (unless another master is catalogued there: `duplicate`), a different one gets `-1`, `-2`
+  (`ImportFiles.uniqueBaseName`) → `ImportFiles.copy` + sidecar, each byte-compared (`sameContents`, F_NOCACHE)
+  → `catalog.relocatePhotos` (path, file name, sidecar, covering root, master + copies; refuses another master's
+  path) → optional Trash of the original + sidecar (`trashItem`, injectable). One photo at a time: cancel /
+  failure removes only that photo's new files. Stops (no per-photo errors) when the destination disappears or
+  isn't writable. Ends with one `.roots` post; the controller then `PreviewJobs.notifyChanged` + `reloadPhotos`.
+  The destination is registered as a root (`registerRoot`, read/write bookmark) and remembered by path.
+  Edits, flags, tags, folders and previews are keyed by photo id and don't move.
 
 ## Catalog transfer (`CatalogTransfer/`, harness `Tools/catalog_transfer_check.swift`)
 

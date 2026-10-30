@@ -5,6 +5,31 @@ CI builds the universal app and publishes the top section as its release notes (
 Fix releases bump the patch (0.1.0 → 0.1.1); significant new features bump the minor (→ 0.2.0).
 Newest first; written for people, not commits.
 
+## 0.6.0 — 2026-10-30
+
+**Photos on several devices**
+- Keep your library on a photo drive or NAS and still import onto your Mac while you travel. Кика knows which device
+  each photo's file is on: This Mac, or a drive, NAS share or card by its name (T9, Photos, …).
+- Filter by device: the Filter menu has a new Device section listing every device with its number of photos, and
+  "offline" when it isn't connected. Choose one and both the grid and the folder list show only what's on it:
+  folders that hold none of its photos are hidden. An "On This Mac" chip shows the filter, and its × clears it. It
+  stays on while you move between folders and other sidebar rows. The Folders filter menu has the same section.
+- Move to Device…: right-click photos (or choose it in the Photo menu), or right-click a folder and choose Move Photos
+  to Device…. Pick the folder they go to, e.g. on your photo drive, and how they're organised there: date folders
+  like Import (YYYY/YYYY-MM-DD or YYYY-MM-DD), the same folders they're in now, or all in one folder.
+- Each file is copied, and the copy is compared byte for byte with the original before Кика switches to it. Edits,
+  flags, ratings, tags, folders, virtual copies and previews all stay with the photo. RAW + JPEG pairs move together.
+- Tick "Move the originals to the Trash" to free up space on your Mac once the copies are checked. It's off every
+  time you open the sheet, so originals are only removed when you ask.
+- Both devices need to be connected. Photos on a drive that isn't connected are listed and skipped.
+- Nothing is overwritten: a different file with the same name in the destination gets "-1" added. An identical file
+  that is already there (e.g. from a move you stopped) is used as it is. Stopping a move keeps every photo moved so
+  far, and the one in progress stays where it was.
+
+**Folders**
+- Right-click a folder and choose Move To ▸ to put it into another folder, or back at the top level. Dragging
+  still works too.
+
 ## 0.5.0 — 2026-10-19
 
 **Export for Instagram**

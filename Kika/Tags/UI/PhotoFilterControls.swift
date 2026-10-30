@@ -3,7 +3,7 @@
 //  Kika
 //
 //  One filter UI for built-in and user tags (`PhotoFilter`): the Filter menu (Flag, Rating, every photo tag
-//  with its values and "To Review") and the chips of active conditions, each removable. Used by the Library
+//  with its values and "To Review", the device the file is on) and the chips of active conditions, each removable. Used by the Library
 //  filter bar and the Develop toolbar (filmstrip). One condition per tag: choosing another value replaces it.
 //
 
@@ -39,6 +39,7 @@ struct PhotoFilterMenu: View {
                         .help(f == .unused ? "Photos not in any Instagram post or story yet" : "Photos in an Instagram post or story")
                 }
             }
+            DeviceFilterSection()
             if !store.photoTags.isEmpty {
                 Section("Tags") {
                     ForEach(store.photoTags) { tag in
@@ -65,7 +66,7 @@ struct PhotoFilterMenu: View {
             Label(showsCount && n > 0 ? "Filter (\(n))" : "Filter", systemImage: n > 0 ? "line.3.horizontal.decrease.circle.fill"
                                                                                        : "line.3.horizontal.decrease.circle")
         }
-        .help("Show photos by flag, rating, Instagram use or tag")
+        .help("Show photos by flag, rating, Instagram use, tag or device")
     }
 
     private func toggle(_ title: String, tag: Tag, match: TagMatch) -> some View {
@@ -98,6 +99,10 @@ struct PhotoFilterChips: View {
                 chip("Instagram: \(model.filter.insta.title.lowercased())", icon: AnyView(Image(systemName: "square.on.square").font(.caption2))) {
                     model.filter.insta = .any
                 }
+            }
+            if let device = model.filter.device {
+                chip("On \(device.title)", icon: AnyView(Image(systemName: device.symbol).font(.caption2))) { model.filter.device = nil }
+                    .help("Photos whose file is on \(device.title); the folder list shows only folders with such photos")
             }
             ForEach(model.filter.tags, id: \.self) { c in
                 if let tag = store.tag(c.tagID) {
@@ -138,5 +143,26 @@ extension TagCondition {
 }
 
 extension PhotoFilter {
-    var conditionCount: Int { (flag == .all ? 0 : 1) + (minRating == 0 ? 0 : 1) + tags.count + (insta == .any ? 0 : 1) }
+    var conditionCount: Int { (flag == .all ? 0 : 1) + (minRating == 0 ? 0 : 1) + tags.count + (insta == .any ? 0 : 1) + (device == nil ? 0 : 1) }
+}
+
+/// "Device" section of the filter menus (photos and folders share `model.filter.device`): the devices
+/// holding catalogued photos, with counts; offline ones say so (their photos show, but can't be opened).
+struct DeviceFilterSection: View {
+    @Environment(AppModel.self) private var model
+    private var store: DeviceStore { .shared }
+
+    var body: some View {
+        if !store.devices.isEmpty {
+            Section("Device") {
+                ForEach(store.devices) { summary in
+                    Toggle(isOn: Binding(get: { model.filter.device == summary.device },
+                                         set: { model.filter.device = $0 ? summary.device : nil })) {
+                        Label(store.menuTitle(summary), systemImage: summary.device.symbol)
+                    }
+                    .help("Only photos whose file is on \(summary.device.title), and the folders that hold them")
+                }
+            }
+        }
+    }
 }

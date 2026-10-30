@@ -30,6 +30,7 @@ struct MainWindowView: View {
         .libraryKeyShortcuts(model: model)
         .fullScreenPreviewShortcut(model: model)
         .exportSheet(model: model)
+        .deviceMoveSheet()   // Devices/UI/DeviceMoveSheet.swift
         .instaExportSheet()   // Instagram/UI/InstaExportSheet.swift
         .catalogTransferSheet(model: model)
         .virtualCopySupport(model: model)   // Rename Virtual Copy alert (VirtualCopies/)

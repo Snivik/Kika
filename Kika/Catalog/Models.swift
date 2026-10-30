@@ -187,8 +187,10 @@ nonisolated struct PhotoFilter: Hashable, Sendable {
     var tags: [TagCondition] = []
     /// Used in an Instagram post or story set (Instagram/), or not.
     var insta: InstaUseFilter = .any
+    /// Only photos whose file is on this device (Devices/PhotoDevice.swift); also scopes the folder list.
+    var device: PhotoDevice? = nil
 
-    var isEmpty: Bool { flag == .all && minRating == 0 && tags.isEmpty && insta == .any }
+    var isEmpty: Bool { flag == .all && minRating == 0 && tags.isEmpty && insta == .any && device == nil }
 }
 
 nonisolated enum InstaUseFilter: String, Hashable, Sendable, CaseIterable {

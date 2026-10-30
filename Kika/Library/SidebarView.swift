@@ -12,7 +12,8 @@
 //    inline rename (Enter commits, Esc cancels, clicking away commits).
 //  - Double-click (or context menu "Rename") renames; ⌫ (registry action) / "Delete Folder…" asks for confirmation.
 //  - Drag a folder onto a folder to nest it, onto the top / bottom edge of a row to reorder,
-//    onto the "Folders" header to move it to the top level. Drag photos from the grid onto a
+//    onto the "Folders" header to move it to the top level; or context menu "Move To ▸" (Top Level or
+//    any folder outside its own subtree, appended). Drag photos from the grid onto a
 //    folder to add them (hold ⌘ to move them out of the shown folder, ⌥ to drop virtual copies;
 //    `PhotoDropVerb`).
 //  Rows: see `FolderRowView.swift`; actions: `FolderActions.swift`; the folder filter row (name + folder
@@ -116,7 +117,7 @@ struct SidebarView: View {
         Section {
             if showsFolders {
                 FolderFilterBar()   // name + tag filter for the folder list
-                let visible = state.visibleTree(model.folderTree)   // FolderFilterBar.swift
+                let visible = state.visibleTree(model.folderTree, device: model.filter.device)   // FolderFilterBar.swift
                 FolderOutline(nodes: visible.nodes, counts: counts, matching: visible.matching)
                 if visible.matching?.isEmpty == true {
                     Text("No Matching Folders").foregroundStyle(.secondary)
@@ -134,11 +135,21 @@ struct SidebarView: View {
             Button("Create Subfolder") { FolderActions.newFolder(parentID: folder.id, model: model) }
             Divider()
             Button("Rename") { state.renamingFolderID = id }
+            Menu("Move To") {
+                // The folder's own subtree isn't offered; its current parent is disabled.
+                Button("Top Level") { FolderActions.move(id, toParent: nil, model: model) }
+                    .disabled(folder.parentID == nil)
+                Divider()
+                FolderMenuTree(nodes: FolderTree.removingSubtree(id, from: model.folderTree), disabledID: folder.parentID) { parent in
+                    FolderActions.move(id, toParent: parent, model: model)
+                }
+            }
             Toggle("Show Photos from Subfolders", isOn: Bindable(model).includeSubfolders)
             Menu("Tags") { FolderTagMenuItems(folderID: id, model: model) }   // Tags/UI/TagViews.swift
             Button(InstaStore.shared.plan(forFolder: id) == nil ? "New Instagram Plan" : "Show Instagram Plan") {
                 InstaActions.showPlan(folderID: id, model: model)
             }
+            Button("Move Photos to Device…") { FolderActions.moveToDevice(id, model: model) }
             Divider()
             Button("Delete Folder…") { FolderActions.requestDelete(id, model: model) }
         } else if case .plan(let id)? = items.first, let plan = InstaStore.shared.plan(id) {

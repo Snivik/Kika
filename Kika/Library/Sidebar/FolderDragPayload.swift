@@ -97,6 +97,14 @@ nonisolated enum FolderDropPlanner {
         return Destination(parentID: nil, index: nil)
     }
 
+    /// Destination for the "Move To ▸" menu: appended under `parent` (nil = top level); nil when
+    /// `parent` is already its parent, or is the folder itself / a descendant.
+    static func menuDestination(moving id: Int64, toParent parent: Int64?, folders: [Folder]) -> Destination? {
+        guard let moving = folders.first(where: { $0.id == id }), moving.parentID != parent else { return nil }
+        if let parent, FolderTree.subtreeIDs(of: id, in: folders).contains(parent) { return nil }
+        return Destination(parentID: parent, index: nil)
+    }
+
     /// Children in display order — same order as `FolderTree.build` / `Catalog.moveFolder`.
     static func sortedChildren(of parent: Int64?, in folders: [Folder]) -> [Folder] {
         folders.filter { $0.parentID == parent }

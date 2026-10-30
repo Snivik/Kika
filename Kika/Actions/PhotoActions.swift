@@ -116,6 +116,8 @@ enum PhotoActions {
             FolderActions.removeFromShownFolder(ids, model: model)
         case .exportJPEG:
             ExportController.shared.present(ids: ids, model: model)
+        case .moveToDevice:
+            DeviceMoveController.shared.present(ids: ids, model: model)   // Devices/UI/
         case .removeFromCatalog:
             PhotoActionUI.shared.pendingRemoval = ids
         case .addToFolder, .moveToFolder, .copyToFolder:

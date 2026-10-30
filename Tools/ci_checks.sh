@@ -41,6 +41,10 @@ check actions_check "$OUT/actions-run" \
 check folders_check "$OUT/folders-run" \
   $APP/App/FolderTree.swift $APP/Library/Sidebar/Catalog+FolderManagement.swift $APP/Library/Sidebar/FolderDragPayload.swift
 
+check devices_check "$OUT/devices-run" \
+  $APP/Devices/Catalog+Devices.swift $APP/Devices/DeviceMove.swift $APP/Import/ImportEngine.swift \
+  $APP/Import/Catalog+Import.swift $APP/VirtualCopies/Catalog+VirtualCopies.swift
+
 HARNESS_NO_DEFAULT=1 check shortcuts_check "" \
   $APP/Shortcuts/ShortcutModel.swift $APP/Shortcuts/ShortcutStore.swift
 

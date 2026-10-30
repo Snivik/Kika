@@ -185,6 +185,7 @@ enum DevScript {
                 case "devphoto": DevTools.addPhoto(arg, model: model)   // "devphoto Development|/path/to/file.DNG"
                 case let c where c.hasPrefix("import"): await ImportDevCommands.run(c, arg: arg, model: model)
                 case "export": await ExportDevScript.run(arg, model: model)   // see Export/UI/ExportDevScript.swift
+                case "device": await DeviceDevScript.run(arg, model: model)   // see Devices/UI/DeviceDevScript.swift
                 case "catalog": await CatalogTransferDevScript.run(arg, model: model)   // see CatalogTransfer/CatalogTransferDevScript.swift
                 case "rr": await RecentRendersDevScript.run(arg, model: model)   // see Previews/UI/RecentRendersDevScript.swift
                 case "vc": await VirtualCopiesDevScript.run(arg, model: model)   // see VirtualCopies/VirtualCopiesDevScript.swift

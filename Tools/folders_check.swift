@@ -103,6 +103,21 @@ struct FoldersCheck {
         check(try children(nil) == [trips, portfolio, misc] && children(trips) == [italy, japan], "un-nest appends at top level")
         check(FolderTree.build(try catalog.allFolders()).map(\.id) == [trips, portfolio, misc], "FolderTree agrees after moves")
 
+        // MARK: Move To ▸ (context menu)
+        folders = try catalog.allFolders()
+        check(FolderDropPlanner.menuDestination(moving: misc, toParent: nil, folders: folders) == nil, "menu: top level → top level is a no-op")
+        check(FolderDropPlanner.menuDestination(moving: trips, toParent: rome, folders: folders) == nil, "menu: into own descendant refused")
+        check(FolderDropPlanner.menuDestination(moving: trips, toParent: trips, folders: folders) == nil, "menu: into itself refused")
+        check(FolderDropPlanner.menuDestination(moving: rome, toParent: italy, folders: folders) == nil, "menu: same parent is a no-op")
+        func treeIDs(_ nodes: [FolderNode]) -> Set<Int64> { Set(nodes.flatMap { [$0.id] + treeIDs($0.children) }) }
+        let targets = FolderTree.removingSubtree(italy, from: FolderTree.build(folders))
+        check(treeIDs(targets) == [trips, japan, portfolio, misc], "menu targets exclude the folder's subtree")
+        try apply(misc, FolderDropPlanner.menuDestination(moving: misc, toParent: japan, folders: folders))
+        check(try children(japan) == [misc] && children(nil) == [trips, portfolio], "menu: top-level folder nested")
+        folders = try catalog.allFolders()
+        try apply(misc, FolderDropPlanner.menuDestination(moving: misc, toParent: nil, folders: folders))
+        check(try children(nil) == [trips, portfolio, misc] && children(japan).isEmpty, "menu: back to top level (appended)")
+
         // MARK: Membership: add / move / remove
         print("Membership")
         try catalog.addPhotos(ids[0..<10], toFolder: italy)
