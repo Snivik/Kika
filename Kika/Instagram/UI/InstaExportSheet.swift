@@ -26,6 +26,8 @@ final class InstaExportController {
     private(set) var destination: URL?
     private(set) var progress = InstaExportProgress()
     private(set) var result: InstaExportResult?
+    /// Frames in a layout Instagram no longer offers, exported as one picture each.
+    private(set) var wholeFrames = 0
     private var job: InstaExportJob?
 
     var title: String { phase == .finished ? "Exported “\(name)”" : "Exporting “\(name)”" }
@@ -60,6 +62,7 @@ final class InstaExportController {
         self.name = name
         self.destination = destination
         result = nil
+        wholeFrames = 0
         progress = InstaExportProgress()
         isPresented = true
         let job: InstaExportJob
@@ -69,6 +72,7 @@ final class InstaExportController {
             return
         }
         self.job = job
+        wholeFrames = job.wholeFrameCount
         phase = .exporting
         progress.total = job.fileCount
         Task {
@@ -121,6 +125,15 @@ struct InstaExportSheet: View {
             Text("Each photo as its own image, 1080 px wide · sRGB JPEG")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if controller.wholeFrames > 0 {
+                let n = controller.wholeFrames
+                Label("\(n) frame\(n == 1 ? " uses a layout" : "s use layouts") Instagram doesn’t offer any more, so "
+                      + "\(n == 1 ? "it is" : "each is") saved as one picture. Choose a new layout to get its photos separately.",
+                      systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             buttons
         }
         .padding(20)

@@ -62,32 +62,48 @@ nonisolated enum InstaAspect: String, Hashable, Sendable, CaseIterable {
 }
 
 /// How a slide's frame is divided into cells. Rects are computed in `cellRects(in:gap:)`.
+/// The multi-cell layouts match Instagram's story Layout (`offered`, in its order), so each photo exports on its own
+/// and goes back into the same cell there. Older layouts Instagram doesn't have (`isLegacy`) stay on the frames that
+/// use them but aren't offered; such a frame exports as one picture (InstaExport).
 nonisolated enum InstaLayout: String, Hashable, Sendable, CaseIterable {
     case single
-    case stack2
-    case side2
-    case stack3
     case grid4
+    case stack2
+    case stack3
+    case topBottom3
+    case grid6
+    case side2
+    /// Legacy: a large top two thirds over 2 small. Instagram's is `topBottom3` (halves).
     case feature3
+
+    /// What the Layout menus offer: single, then Instagram's layouts in its order.
+    static let offered: [InstaLayout] = allCases.filter { !$0.isLegacy }
+
+    /// Not one of Instagram's layouts: kept for frames made with it, exported as one picture.
+    var isLegacy: Bool { self == .feature3 }
 
     var title: String {
         switch self {
         case .single: "Single Photo"
-        case .stack2: "2 Stacked"
-        case .side2: "2 Side by Side"
-        case .stack3: "3 Stacked"
         case .grid4: "2 × 2 Grid"
-        case .feature3: "1 Large + 2 Small"
+        case .stack2: "2 Stacked"
+        case .stack3: "3 Stacked"
+        case .topBottom3: "1 Top + 2 Bottom"
+        case .grid6: "2 × 3 Grid"
+        case .side2: "2 Side by Side"
+        case .feature3: "1 Large + 2 Small (old)"
         }
     }
 
     var systemImage: String {
         switch self {
         case .single: "rectangle.portrait"
-        case .stack2: "rectangle.split.1x2"
-        case .side2: "rectangle.split.2x1"
-        case .stack3: "rectangle.split.3x1"
         case .grid4: "rectangle.split.2x2"
+        case .stack2: "rectangle.split.1x2"
+        case .stack3: "rectangle.split.3x1"
+        case .topBottom3: "rectangle.3.group"
+        case .grid6: "rectangle.grid.3x2"
+        case .side2: "rectangle.split.2x1"
         case .feature3: "rectangle.3.group"
         }
     }
@@ -101,6 +117,10 @@ nonisolated enum InstaLayout: String, Hashable, Sendable, CaseIterable {
         .side2: [CGRect(x: 0, y: 0, width: 0.5, height: 1), CGRect(x: 0.5, y: 0, width: 0.5, height: 1)],
         .stack3: (0..<3).map { CGRect(x: 0, y: CGFloat($0) / 3, width: 1, height: 1.0 / 3) },
         .grid4: (0..<4).map { CGRect(x: CGFloat($0 % 2) / 2, y: CGFloat($0 / 2) / 2, width: 0.5, height: 0.5) },
+        .topBottom3: [CGRect(x: 0, y: 0, width: 1, height: 0.5),
+                      CGRect(x: 0, y: 0.5, width: 0.5, height: 0.5),
+                      CGRect(x: 0.5, y: 0.5, width: 0.5, height: 0.5)],
+        .grid6: (0..<6).map { CGRect(x: CGFloat($0 % 2) / 2, y: CGFloat($0 / 2) / 3, width: 0.5, height: 1.0 / 3) },
         .feature3: [CGRect(x: 0, y: 0, width: 1, height: 2.0 / 3),
                     CGRect(x: 0, y: 2.0 / 3, width: 0.5, height: 1.0 / 3),
                     CGRect(x: 0.5, y: 2.0 / 3, width: 0.5, height: 1.0 / 3)],

@@ -15,11 +15,11 @@
 //    zoombench [n]                     time n region renders of the current view (1:1 etc.)
 //    zoomdump                          zoom / tile / panel / canvas state
 //    panels tab|shifttab|show          Tab / ⇧Tab actions (or reset to all visible)
-//    fullscreen on|off|next|prev|dump|snapshot <png>|wait   full-screen preview
+//    fullscreen on|quicklook|off|next|prev|dump|snapshot <png>|wait   full-screen preview (or Quick Look)
 //    zactivate                         force-activate the app (synthesized clicks need an active window)
 //    zmaskdrag <x1> <y1> <x2> <y2>     drive MaskInteraction like MaskOverlayView (no real events)
 //    zmaskexp <ev>                     exposure of the selected mask
-//    fskey left|right|z|f|escape       real key event to the full-screen window
+//    fskey left|right|up|down|z|f|space|escape   real key event to the full-screen / Quick Look window
 //    winfull                           toggle the main window's native full screen (⌃⌘F)
 //    fullz <percent> [nx ny]           zoom in the full-screen preview
 //    pinch <x> <y> <factor> [steps] [ms] [hold]  REAL trackpad pinch: posts NSEvent .magnify events
@@ -111,6 +111,7 @@ enum ZoomDevScript {
             let fs = FullScreenPreview.shared
             switch v.first ?? "" {
             case "on": fs.show(model: model)
+            case "quicklook": fs.show(model: model, style: .quickLook)
             case "off": fs.close()
             case "next": fs.move(by: 1)
             case "prev": fs.move(by: -1)
@@ -124,7 +125,7 @@ enum ZoomDevScript {
             case "snapshot":
                 if let w = fs.window, v.count > 1 { snapshot(window: w, to: v[1]) }
             default:
-                print("DevScript fullscreen: showing=\(fs.isShowing) photo=\(fs.photoID.map(String.init) ?? "-") image=\(fs.image.map { "\($0.width)x\($0.height)" } ?? "-") placeholder=\(fs.isPlaceholder) key=\(fs.window?.isKeyWindow ?? false) frame=\(fs.window?.frame ?? .zero) focused=\(model.focusedPhotoID.map(String.init) ?? "-")")
+                print("DevScript fullscreen: showing=\(fs.isShowing) style=\(fs.style) title=\(fs.window?.title ?? "-") photo=\(fs.photoID.map(String.init) ?? "-") image=\(fs.image.map { "\($0.width)x\($0.height)" } ?? "-") placeholder=\(fs.isPlaceholder) key=\(fs.window?.isKeyWindow ?? false) frame=\(fs.window?.frame ?? .zero) focused=\(model.focusedPhotoID.map(String.init) ?? "-")")
                 dump(fs.zoom, name: "fullscreen")
             }
         case "zactivate":
@@ -149,11 +150,13 @@ enum ZoomDevScript {
             print("DevScript zmaskdrag: masks=\(session.settings.masks.count) view \(a) -> mask \(space.geometry.maskPoint(fromView: a))")
         case "zmaskexp":   // exposure of the selected mask
             if let s = model.developSession, let id = s.selectedMaskID { s.updateMask(id) { $0.adjustments.exposure = nums.first ?? 1 } }
-        case "fskey":   // real key event to the full-screen window: left|right|z|f|escape
+        case "fskey":   // real key event to the full-screen / Quick Look window: left|right|up|down|z|f|space|escape
             guard let w = FullScreenPreview.shared.window else { print("DevScript fskey: not showing"); return }
             let map: [String: (UInt16, String)] = ["left": (123, String(UnicodeScalar(NSLeftArrowFunctionKey)!)),
                                                    "right": (124, String(UnicodeScalar(NSRightArrowFunctionKey)!)),
-                                                   "z": (6, "z"), "f": (3, "f"), "escape": (53, "\u{1b}")]
+                                                   "up": (126, String(UnicodeScalar(NSUpArrowFunctionKey)!)),
+                                                   "down": (125, String(UnicodeScalar(NSDownArrowFunctionKey)!)),
+                                                   "z": (6, "z"), "f": (3, "f"), "space": (49, " "), "escape": (53, "\u{1b}")]
             guard let (code, chars) = map[arg] else { return }
             let flags: NSEvent.ModifierFlags = code >= 123 ? [.function, .numericPad] : []
             for type in [NSEvent.EventType.keyDown, .keyUp] {

@@ -12,12 +12,35 @@ import CoreGraphics
 
 nonisolated enum MaskKind: String, CaseIterable, Sendable {
     case linear, radial, brush
+    // Found by Vision (AIMask)
+    case subject, background, people, sky, object
+
+    /// Drawn on the photo.
+    static let shapes: [MaskKind] = [.linear, .radial, .brush]
+    /// Found on the photo (Select row of the panel).
+    static let found: [MaskKind] = [.subject, .background, .people, .sky, .object]
+
+    var aiTarget: AIMask.Target? {
+        switch self {
+        case .subject: .subject
+        case .background: .background
+        case .people: .people
+        case .sky: .sky
+        case .object: .object
+        case .linear, .radial, .brush: nil
+        }
+    }
 
     var title: String {
         switch self {
         case .linear: "Linear Gradient"
         case .radial: "Radial Gradient"
         case .brush: "Brush"
+        case .subject: "Subject"
+        case .background: "Background"
+        case .people: "People"
+        case .sky: "Sky"
+        case .object: "Object"
         }
     }
 
@@ -26,6 +49,11 @@ nonisolated enum MaskKind: String, CaseIterable, Sendable {
         case .linear: "rectangle.tophalf.filled"
         case .radial: "circle.dashed"
         case .brush: "paintbrush.pointed"
+        case .subject: "person.and.background.dotted"
+        case .background: "photo"
+        case .people: "person.2"
+        case .sky: "cloud.sun"
+        case .object: "hand.point.up.left"
         }
     }
 }
@@ -36,32 +64,83 @@ nonisolated extension MaskShape {
         case .linear: .linear
         case .radial: .radial
         case .brush: .brush
+        case .ai(let m):
+            switch m.target {
+            case .subject: .subject
+            case .background: .background
+            case .people: .people
+            case .sky: .sky
+            case .object: .object
+            }
         }
     }
 }
 
-nonisolated extension Mask {
-    /// Shape accessors: nil if the mask is another kind; setting replaces the shape.
+nonisolated extension MaskShape {
+    /// Shape accessors: nil if the shape is another kind; setting replaces the shape.
     var linear: LinearGradientMask? {
-        get { if case .linear(let m) = shape { m } else { nil } }
-        set { if let newValue { shape = .linear(newValue) } }
+        get { if case .linear(let m) = self { m } else { nil } }
+        set { if let newValue { self = .linear(newValue) } }
     }
     var radial: RadialGradientMask? {
-        get { if case .radial(let m) = shape { m } else { nil } }
-        set { if let newValue { shape = .radial(newValue) } }
+        get { if case .radial(let m) = self { m } else { nil } }
+        set { if let newValue { self = .radial(newValue) } }
     }
     var brush: BrushMask? {
-        get { if case .brush(let m) = shape { m } else { nil } }
-        set { if let newValue { shape = .brush(newValue) } }
+        get { if case .brush(let m) = self { m } else { nil } }
+        set { if let newValue { self = .brush(newValue) } }
+    }
+    var ai: AIMask? {
+        get { if case .ai(let m) = self { m } else { nil } }
+        set { if let newValue { self = .ai(newValue) } }
     }
 
-    /// Where the mask's pin is drawn (mask space).
+    /// Where the shape's pin is drawn (mask space).
     var pinPoint: NormPoint? {
-        switch shape {
+        switch self {
         case .linear(let m): return NormPoint(x: (m.start.x + m.end.x) / 2, y: (m.start.y + m.end.y) / 2)
         case .radial(let m): return m.center
         case .brush(let m): return m.strokes.first(where: { !$0.isEraser && !$0.points.isEmpty })?.points.first
+        case .ai(let m): return m.points.first   // picked objects; whole-photo selections have no pin
         }
+    }
+}
+
+/// A mask's main shape (`part` nil) or one of its parts.
+nonisolated struct MaskRef: Equatable, Hashable, Sendable {
+    var mask: UUID
+    var part: UUID? = nil
+}
+
+nonisolated extension Mask {
+    /// Main shape accessors: nil if the mask is another kind; setting replaces the shape.
+    var linear: LinearGradientMask? { get { shape.linear } set { shape.linear = newValue } }
+    var radial: RadialGradientMask? { get { shape.radial } set { shape.radial = newValue } }
+    var brush: BrushMask? { get { shape.brush } set { shape.brush = newValue } }
+    var ai: AIMask? { get { shape.ai } set { shape.ai = newValue } }
+
+    /// Where the mask's pin is drawn (mask space).
+    var pinPoint: NormPoint? { shape.pinPoint }
+
+    /// The main shape (nil) or a part's shape.
+    func shape(part: UUID?) -> MaskShape? {
+        guard let part else { return shape }
+        return parts.first { $0.id == part }?.shape
+    }
+
+    /// Changes the main shape (nil) or a part's shape.
+    mutating func updateShape(part: UUID?, _ change: (inout MaskShape) -> Void) {
+        guard let part else { change(&shape); return }
+        guard let i = parts.firstIndex(where: { $0.id == part }) else { return }
+        change(&parts[i].shape)
+    }
+
+    /// Where paint / erase strokes go: the main shape of a brush mask without parts, else the last part when
+    /// it is a brush; nil = append a new brush part (so strokes always apply after every part before them).
+    var brushTarget: MaskRef? {
+        if parts.isEmpty, shape.brush != nil { return MaskRef(mask: id) }
+        if let last = parts.last, last.shape.brush != nil { return MaskRef(mask: id, part: last.id) }
+        return nil
     }
 }
 

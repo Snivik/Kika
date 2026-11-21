@@ -27,6 +27,10 @@ enum CanvasCursor: Hashable {
     case zoomIn, grabIdle, grabActive, crosshair
     /// Crop tool, outside the crop rectangle: drag rotates (straightens).
     case rotate
+    /// Mask brush: a small + (paint) or − (erase) inside the drawn brush circle.
+    case brush(erase: Bool)
+    /// Pick Object: a pointing finger, with − when the click removes the object.
+    case pick(subtract: Bool)
     case resize(Edge)
 
     enum Edge: Hashable { case top, bottom, leading, trailing, topLeading, topTrailing, bottomLeading, bottomTrailing }
@@ -39,6 +43,9 @@ enum CanvasCursor: Hashable {
         case .crosshair: .rectSelection
         // A white curved double arrow with a dark outline, readable on both dark and light photos.
         case .rotate: .image(Image(nsImage: CanvasPointer.rotateImage), hotSpot: .center)
+        case .brush(let erase): .image(Image(nsImage: erase ? CanvasPointer.minusImage : CanvasPointer.plusImage), hotSpot: .center)
+        case .pick(let subtract):
+            .image(Image(nsImage: subtract ? CanvasPointer.pickSubtractImage : CanvasPointer.pickImage), hotSpot: CanvasPointer.pickHotSpot)
         case .resize(let e):
             switch e {
             case .top: .frameResize(position: .top)
@@ -121,6 +128,26 @@ private struct CanvasPointerClaim: ViewModifier {
 
 enum CanvasPointer {
     static let rotateImage: NSImage = outlined(symbol: ["arrow.trianglehead.2.clockwise.rotate.90", "arrow.clockwise"], size: 18)
+    static let plusImage: NSImage = outlined(symbol: ["plus"], size: 9)
+    static let minusImage: NSImage = outlined(symbol: ["minus"], size: 9)
+    private static let hand: NSImage = outlined(symbol: ["hand.point.up.left.fill"], size: 18)
+    static let pickImage: NSImage = badged(hand, plusImage)
+    static let pickSubtractImage: NSImage = badged(hand, minusImage)
+    /// The fingertip (about 20 % / 10 % into the hand symbol).
+    static var pickHotSpot: UnitPoint {
+        UnitPoint(x: 0.2 * hand.size.width / pickImage.size.width, y: 0.1 * hand.size.height / pickImage.size.height)
+    }
+
+    /// `image` with `badge` at its lower right.
+    private static func badged(_ image: NSImage, _ badge: NSImage) -> NSImage {
+        let size = NSSize(width: image.size.width + badge.size.width * 0.5, height: image.size.height + badge.size.height * 0.4)
+        return NSImage(size: size, flipped: true) { _ in
+            image.draw(in: NSRect(origin: .zero, size: image.size))
+            badge.draw(in: NSRect(x: size.width - badge.size.width, y: size.height - badge.size.height,
+                                  width: badge.size.width, height: badge.size.height))
+            return true
+        }
+    }
 
     /// The first available SF Symbol, white on a 1.5 pt dark outline, in an image with room for the outline.
     private static func outlined(symbol names: [String], size: CGFloat) -> NSImage {

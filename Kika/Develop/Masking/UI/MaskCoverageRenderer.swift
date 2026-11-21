@@ -17,6 +17,13 @@ final class MaskCoverageRenderer {
         var geometry: Geometry
         var fullSize: CGSize
         var targetSize: CGSize
+        /// The photo (AI masks analyse it).
+        var source: RenderSource?
+
+        static func == (a: Request, b: Request) -> Bool {
+            a.mask == b.mask && a.geometry == b.geometry && a.fullSize == b.fullSize && a.targetSize == b.targetSize
+                && a.source.map(ObjectIdentifier.init) == b.source.map(ObjectIdentifier.init)
+        }
     }
 
     private(set) var image: CGImage?
@@ -29,7 +36,8 @@ final class MaskCoverageRenderer {
         inFlight = true
         let gen = generation
         Task.detached(priority: .userInitiated) { [weak self] in
-            let img = MaskRenderer.coverageImage(for: r.mask, geometry: r.geometry, fullSize: r.fullSize, targetSize: r.targetSize)
+            let img = MaskRenderer.coverageImage(for: r.mask, geometry: r.geometry, fullSize: r.fullSize, targetSize: r.targetSize,
+                                                 source: r.source)
             await self?.finished(img, generation: gen)
         }
     }

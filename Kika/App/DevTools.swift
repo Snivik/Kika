@@ -193,6 +193,7 @@ enum DevScript {
                 case "decode": DecodeDevScript.run(arg, model: model)   // see Develop/Decode/UI/DecodeDevScript.swift
                 case "pointer": await CanvasPointerDevScript.run(arg)   // see Develop/Overlays/CanvasPointerDevScript.swift
                 case "tag": TagsDevScript.run(arg, model: model)   // see Tags/UI/TagsDevScript.swift
+                case "cleanup": await CleanupDevScript.run(arg, model: model)   // see Cleanup/UI/CleanupDevScript.swift
                 case "insta": await InstaDevScript.run(arg, model: model)   // see Instagram/UI/InstaDevScript.swift
                 case "stuckdrag": StuckDragGuard.devCommand(arg)   // see App/StuckDragGuard.swift
                 case let c where IntegrationDevScript.commands.contains(c): IntegrationDevScript.run(c, arg, model: model)
@@ -200,7 +201,7 @@ enum DevScript {
                 case let c where MaskDevScript.commands.contains(c): MaskDevScript.run(c, arg, session: model.developSession)
                 case let c where ZoomDevScript.commands.contains(c): await ZoomDevScript.run(c, arg, model: model)   // Develop/Zoom
                 case let c where ShortcutsDevScript.commands.contains(c): await ShortcutsDevScript.run(c, arg, model: model)   // Shortcuts/
-                case "key", "type", "click", "dclick", "dump", "menus", "action", "row", "whichmenu": FoldersDevScript.run(parts[0], arg, model: model)
+                case "key", "type", "click", "dclick", "qclick", "qdclick", "dump", "menus", "action", "row", "whichmenu": FoldersDevScript.run(parts[0], arg, model: model)
                 default: print("DevScript: unknown command \(command)")
                 }
         }

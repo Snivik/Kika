@@ -11,6 +11,16 @@
 //    Z / click    Fit ↔ 1:1 at the pointer (drag / scroll pans, pinch / ⌘-scroll zooms, ⌘= / ⌘-)
 //    F / Esc      close
 //
+//  Quick Look (Space in Library, as in Finder): the same preview in a floating window centred on the
+//  main window and sized to the photo, titled with its file name; the grid stays usable behind it.
+//    ← → ↑ ↓      move through the grid (the grid's own handlers; ↑ / ↓ by row), ⇧ extends
+//    Space / Esc  close        F  switch to full screen
+//  It follows the grid's focused photo (clicks, arrows in the main window) and closes on leaving Library.
+//  Animation (as in Finder): Quick Look zooms out of the photo's grid thumbnail (`GridCellFrames`) and back into it,
+//  crossfades between photos and resizes to each photo's shape; the full-screen preview fades in and out. Closing
+//  freezes the window on its last image and animates that, so the preview's state resets at once. Reduce motion:
+//  fades only.
+//
 //  Rendering: the cached standard preview shows at once, then a render at screen resolution
 //  (RenderPipeline, off-main); the neighbours in the direction of travel are pre-rendered.
 //  While skimming (← / → faster than the full preview delay) the render waits for that delay
@@ -28,7 +38,10 @@ import SwiftUI
 final class FullScreenPreview {
     static let shared = FullScreenPreview()
 
+    enum Style { case fullScreen, quickLook }
+
     private(set) var isShowing = false
+    private(set) var style = Style.fullScreen
     /// Photo shown and the image for it (placeholder preview until the render arrives).
     private(set) var photoID: Int64?
     private(set) var image: CGImage?
@@ -71,14 +84,28 @@ final class FullScreenPreview {
         if isShowing { close() } else { show(model: model) }
     }
 
-    func show(model: AppModel) {
+    /// Space: Quick Look on / off.
+    func toggleQuickLook(model: AppModel) {
+        if isShowing { close() } else { show(model: model, style: .quickLook) }
+    }
+
+    /// Whether `window` is the Quick Look window (key events from it drive the grid).
+    func isQuickLook(_ window: NSWindow?) -> Bool { isShowing && style == .quickLook && window != nil && window === self.window }
+
+    func show(model: AppModel, style: Style = .fullScreen) {
+        if isShowing, self.style == .quickLook, style == .fullScreen { close(animated: false) }   // F from Quick Look
         guard !isShowing else { return }
         let id = model.focusedPhotoID ?? model.photos.first(where: { model.selection.contains($0.id) })?.id
-        guard let id, model.photo(id: id) != nil else { NSSound.beep(); return }
+        guard let id, let photo = model.photo(id: id) else { NSSound.beep(); return }
         if model.focusedPhotoID != id { model.focusedPhotoID = id }
         self.model = model
+        self.style = style
         let main = NSApp.windows.first { $0.isVisible && !($0 is NSPanel) && $0 !== window }
         guard let screen = main?.screen ?? NSScreen.main else { return }
+        if style == .quickLook {
+            showQuickLook(photo: photo, over: main, screen: screen, model: model)
+            return
+        }
 
         let w = FullScreenWindow(contentRect: screen.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         w.backgroundColor = .black
@@ -100,18 +127,146 @@ final class FullScreenPreview {
         if !(main?.styleMask.contains(.fullScreen) ?? false) {
             NSApp.presentationOptions = savedPresentation.union([.hideDock, .hideMenuBar])
         }
+        w.alphaValue = 0
         w.makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.18
+            w.animator().alphaValue = 1
+        }
         installKeys()
         load(photoID: id)
     }
 
-    func close() {
+    /// A floating, resizable window centred on the main window, the photo's shape, up to 85 % of the main window.
+    private func showQuickLook(photo: Photo, over main: NSWindow?, screen: NSScreen, model: AppModel) {
+        let area = (main?.frame ?? screen.visibleFrame).intersection(screen.visibleFrame)
+        quickLookArea = area
+        let content = quickLookContentSize(for: photo, in: area)
+
+        let w = QuickLookWindow(contentRect: CGRect(origin: .zero, size: content), styleMask: [.titled, .closable, .resizable, .miniaturizable],
+                                backing: .buffered, defer: false)
+        w.backgroundColor = .black
+        w.appearance = NSAppearance(named: .darkAqua)
+        w.isReleasedWhenClosed = false
+        w.level = .floating
+        w.collectionBehavior = [.fullScreenAuxiliary, .moveToActiveSpace]
+        w.title = photo.displayTitle
+        w.onClose = { [weak self] in self?.close(animated: false) }
+        let host = NSHostingView(rootView: QuickLookView(preview: self).environment(model))
+        host.sizingOptions = []   // the window sets the size (it starts thumbnail-small)
+        w.contentView = host
+        w.contentMinSize = CGSize(width: 320, height: 240)
+        w.setContentSize(content)
+        let final = CGRect(origin: CGPoint(x: (area.midX - w.frame.width / 2).rounded(), y: (area.midY - w.frame.height / 2).rounded()),
+                           size: w.frame.size)
+        window = w
+        isShowing = true
+        // Zoom out of the thumbnail (or grow a little, when it isn't on screen).
+        let start: CGRect
+        if reduceMotion { start = final }
+        else if let thumb = thumbnailRect(photo) { start = w.frameRect(forContentRect: thumb) }
+        else { start = final.insetBy(dx: final.width * 0.04, dy: final.height * 0.04) }
+        w.setFrame(start, display: false)
+        w.alphaValue = 0
+        w.makeKeyAndOrderFront(nil)
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = reduceMotion ? 0.15 : 0.24
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            w.animator().setFrame(final, display: true)
+            w.animator().alphaValue = 1
+        }
+        installKeys()
+        load(photoID: photo.id)
+    }
+
+    // MARK: - Animation
+
+    /// The main window's part of the screen when Quick Look opened (its windows are sized within it).
+    @ObservationIgnored private var quickLookArea: CGRect = .zero
+
+    /// System Settings › Accessibility › Display › Reduce motion: fade, don't zoom or resize.
+    private var reduceMotion: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
+
+    /// Quick Look's content size for a photo: its shape, up to 85 % of `area` (at least 320 × 240).
+    private func quickLookContentSize(for photo: Photo, in area: CGRect) -> CGSize {
+        let shape = GeometryMath(sourceSize: photo.orientedSize, geometry: photo.editSettings.geometry).croppedSize
+        let bound = CGSize(width: max(480, area.width * 0.85), height: max(360, area.height * 0.85 - 28))
+        let k = shape.width > 0 && shape.height > 0 ? min(bound.width / shape.width, bound.height / shape.height) : 1
+        return CGSize(width: max(320, (shape.width * k).rounded()), height: max(240, (shape.height * k).rounded()))
+    }
+
+    /// The photo's thumbnail in the grid, screen coordinates: its shape fitted into the cell's image square.
+    /// nil when the cell isn't (mostly) visible in the main window.
+    private func thumbnailRect(_ photo: Photo) -> CGRect? {
+        guard let main = ShortcutDispatcher.shared.mainWindow, let content = main.contentView,
+              let cell = GridCellFrames.frames[photo.id] else { return nil }
+        // SwiftUI's global space is the content view, top-left origin.
+        let square = CGRect(x: cell.minX, y: content.bounds.height - cell.minY - cell.width, width: cell.width, height: cell.width)
+        guard square.intersection(main.contentLayoutRect).width > square.width * 0.5 else { return nil }
+        let shape = GeometryMath(sourceSize: photo.orientedSize, geometry: photo.editSettings.geometry).croppedSize
+        let inner = square.insetBy(dx: 6, dy: 6)
+        guard shape.width > 0, shape.height > 0 else { return nil }
+        let k = min(inner.width / shape.width, inner.height / shape.height)
+        let fitted = CGRect(x: inner.midX - shape.width * k / 2, y: inner.midY - shape.height * k / 2,
+                            width: shape.width * k, height: shape.height * k)
+        return main.convertToScreen(fitted)
+    }
+
+    /// Quick Look follows a new photo: refit the window to its shape around the same centre.
+    private func refitQuickLook(to photo: Photo) {
+        guard style == .quickLook, let w = window, w.isVisible else { return }
+        let content = quickLookContentSize(for: photo, in: quickLookArea)
+        let size = w.frameRect(forContentRect: CGRect(origin: .zero, size: content)).size
+        guard abs(size.width - w.frame.width) > 1 || abs(size.height - w.frame.height) > 1 else { return }
+        var frame = CGRect(x: (w.frame.midX - size.width / 2).rounded(), y: (w.frame.midY - size.height / 2).rounded(),
+                           width: size.width, height: size.height)
+        if let visible = w.screen?.visibleFrame {   // keep it on screen
+            frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+            frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+        }
+        if reduceMotion { w.setFrame(frame, display: true); return }
+        NSAnimationContext.runAnimationGroup { ctx in
+            ctx.duration = 0.2
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            w.animator().setFrame(frame, display: true)
+        }
+    }
+
+    /// Shows the window's last image without the live view, then zooms it into `target` (screen, content rect) or
+    /// just fades it, and orders it out.
+    private func animateOut(_ w: NSWindow, to target: CGRect?) {
+        let frozen = NSImageView()
+        frozen.image = image.map { NSImage(cgImage: $0, size: .zero) }
+        frozen.imageScaling = .scaleProportionallyUpOrDown
+        frozen.wantsLayer = true
+        frozen.layer?.backgroundColor = NSColor.black.cgColor
+        w.contentView = frozen
+        w.ignoresMouseEvents = true
+        NSAnimationContext.runAnimationGroup({ ctx in
+            ctx.duration = target == nil ? 0.15 : 0.22
+            ctx.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            if let target { w.animator().setFrame(w.frameRect(forContentRect: target), display: true) }
+            w.animator().alphaValue = 0
+        }, completionHandler: {
+            w.orderOut(nil)
+            w.contentView = nil
+        })
+    }
+
+    /// `animated` false: gone at once (Quick Look → full screen, the window's close button).
+    func close(animated: Bool = true) {
         guard isShowing else { return }
         isShowing = false
         ShortcutDispatcher.shared.unregister(shortcutToken)
-        NSApp.presentationOptions = savedPresentation
-        window?.orderOut(nil)
-        window?.contentView = nil
+        if style == .fullScreen { NSApp.presentationOptions = savedPresentation }
+        (window as? QuickLookWindow)?.onClose = nil
+        if let w = window, w.isVisible, animated {
+            let target = style == .quickLook && !reduceMotion ? (photoID.flatMap { model?.photo(id: $0) }).flatMap(thumbnailRect) : nil
+            animateOut(w, to: target)
+        } else {
+            window?.orderOut(nil)
+            window?.contentView = nil
+        }
         window = nil
         zoom.purge()
         zoom.window = nil
@@ -126,11 +281,22 @@ final class FullScreenPreview {
         NSApp.windows.first { $0.isVisible && !($0 is NSPanel) }?.makeKeyAndOrderFront(nil)
     }
 
-    /// Keys of the full-screen window (registry actions; defaults ← / → / F / Esc).
+    /// Keys of the full-screen window (registry actions; defaults ← / → / F / Esc); Quick Look: Space / Esc / F.
     private func installKeys() {
         let mine: @MainActor (NSEvent) -> Bool = { [weak self] event in
             guard let self, self.isShowing, let w = self.window else { return false }
             return event.window === w
+        }
+        if style == .quickLook {
+            ShortcutDispatcher.shared.register(shortcutToken, [
+                ShortcutHandler(.exitFullScreen, when: mine) { [weak self] _ in self?.close() },
+                ShortcutHandler(.quickLook, when: mine) { [weak self] _ in self?.close() },
+                ShortcutHandler(.fullScreenPreview, when: mine) { [weak self] _ in
+                    guard let self, let model = self.model else { return }
+                    self.show(model: model, style: .fullScreen)
+                },
+            ])
+            return
         }
         ShortcutDispatcher.shared.register(shortcutToken, [
             ShortcutHandler(.exitFullScreen, when: mine) { [weak self] _ in self?.close() },
@@ -183,12 +349,17 @@ final class FullScreenPreview {
         let size = screenPixelSize
         let key = CacheKey(photoID: id, settings: settings.jsonString() ?? "", size: size)
         let isNewPhoto = photoID != id
+        let isNextPhoto = isNewPhoto && photoID != nil   // not the first one (Quick Look is still zooming open)
         if isNewPhoto { zoom.setInputs(nil) }
         placeholderTask?.cancel()
         renderTask?.cancel()
         photoID = id
         currentSettings = settings
         currentSource = knownSource
+        if style == .quickLook {
+            window?.title = photo.displayTitle
+            if isNextPhoto { refitQuickLook(to: photo) }
+        }
         displayedSize = GeometryMath(sourceSize: knownSource?.orientedSize ?? photo.orientedSize, geometry: settings.geometry).croppedSize
         if let hit = cache[key] {
             image = hit
@@ -244,7 +415,7 @@ final class FullScreenPreview {
     }
 
     private func updateZoomInputs() {
-        guard let photoID, let source = currentSource, let image, !isPlaceholder, displayedSize.width > 0 else { return }
+        guard style == .fullScreen, let photoID, let source = currentSource, let image, !isPlaceholder, displayedSize.width > 0 else { return }
         zoom.setInputs(ZoomRenderInputs(photoID: photoID, source: source, settings: currentSettings, applyCrop: true,
                                         baseRatio: CGFloat(image.width) / displayedSize.width))
     }
@@ -293,6 +464,49 @@ final class FullScreenPreview {
 private final class FullScreenWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
+}
+
+/// The Quick Look window; its close button closes the preview.
+private final class QuickLookWindow: NSWindow {
+    var onClose: (() -> Void)?
+
+    override func close() {
+        let done = onClose
+        onClose = nil
+        super.close()
+        done?()
+    }
+}
+
+/// Quick Look: the photo fitted to the window on black.
+struct QuickLookView: View {
+    let preview: FullScreenPreview
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        ZStack {
+            Color.black
+            if let image = preview.image {
+                Image(decorative: image, scale: 1)
+                    .resizable()
+                    .interpolation(.high)
+                    .aspectRatio(contentMode: .fit)
+                    .id(preview.photoID)            // a new photo crossfades; its sharper render replaces it in place
+                    .transition(.opacity)
+            } else {
+                ProgressView().controlSize(.large)
+            }
+        }
+        .animation(NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .easeInOut(duration: 0.18), value: preview.photoID)
+        .onTapGesture(count: 2) {
+            guard let id = preview.photoID else { return }
+            preview.close()
+            model.openInDevelop(id)
+        }
+        .help("Double-click to open in Develop")
+        .onChange(of: model.focusedPhotoID) { _, id in preview.focusChanged(to: id) }
+        .onChange(of: model.mode) { _, mode in if mode != .library { preview.close() } }
+    }
 }
 
 struct FullScreenPreviewView: View {
@@ -351,8 +565,13 @@ private struct FullScreenShortcut: ViewModifier {
     func body(content: Content) -> some View {
         content.shortcutHandlers { [model] in
             [ShortcutHandler(.fullScreenPreview, when: { event in
-                event.window === ShortcutDispatcher.shared.mainWindow && !FullScreenPreview.shared.isShowing
-            }) { _ in FullScreenPreview.shared.show(model: model) }]
+                let fs = FullScreenPreview.shared
+                return event.window === ShortcutDispatcher.shared.mainWindow && (!fs.isShowing || fs.style == .quickLook)
+            }) { _ in FullScreenPreview.shared.show(model: model) },
+             // Space in Library: Quick Look of the focused photo (again: close it).
+             ShortcutHandler(.quickLook, when: { event in
+                 event.window === ShortcutDispatcher.shared.mainWindow && model.mode == .library
+             }) { _ in FullScreenPreview.shared.toggleQuickLook(model: model) }]
         }
     }
 }

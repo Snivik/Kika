@@ -89,6 +89,10 @@ struct ShortcutsCheck {
               && store.candidates(for: KeyCombo("s", [.control, .command]), in: .library) == [.toggleSidebar], "⌃⌘S in Library and Develop: sidebar")
         check(store.candidates(for: KeyCombo("delete"), in: .library) == [.removePhotos, .deleteFolder], "⌫ in Library: grid first, then sidebar")
         check(store.candidates(for: KeyCombo("escape"), in: .mask) == [.maskCancel], "Esc in the mask tool")
+        check(store.candidates(for: KeyCombo("space"), in: .library) == [.quickLook] && store.candidates(for: KeyCombo("space"), in: .quickLook) == [.quickLook]
+              && store.candidates(for: KeyCombo("space"), in: .fullScreen) == [.temporaryHand], "Space: Quick Look in Library and Quick Look, hand tool in full screen")
+        check(store.candidates(for: KeyCombo("down"), in: .quickLook) == [.moveDown] && store.candidates(for: KeyCombo("escape"), in: .quickLook) == [.exitFullScreen]
+              && store.candidates(for: KeyCombo("delete"), in: .quickLook).isEmpty, "Quick Look: arrows move through the grid, Esc closes, ⌫ does nothing")
         check(store.overridden(by: .cropSwapAspect) == [.reject], "Swap Aspect overrides Reject in the crop tool")
 
         print("Overrides / conflicts")
@@ -103,8 +107,8 @@ struct ShortcutsCheck {
         check(store.conflicts(for: KeyCombo("=", .command), action: .zoomIn) == [], "⌘= for Zoom In: no conflict with thumbnails")
         check(store.conflicts(for: KeyCombo("r"), action: .maskOverlay).isEmpty, "R in the mask tool overrides Crop Tool (Develop)")
         check(store.conflicts(for: KeyCombo("tab"), action: .fullScreenPreview).isEmpty, "Tab for Full Screen (everywhere) is overridden by Tab in Develop, no conflict")
-        check(store.conflicts(for: KeyCombo("left"), action: .selectAllPhotos) == [.previousPhoto],
-              "← for Select All Photos (Library & Develop) conflicts with Previous Photo (Develop & Full Screen): partial overlap")
+        check(Set(store.conflicts(for: KeyCombo("left"), action: .selectAllPhotos)) == [.previousPhoto, .moveLeft],
+              "← for Select All Photos (Library & Develop) conflicts with Previous Photo (Develop & Full Screen) and the grid's ← (Library & Quick Look): partial overlap")
         check(store.conflicts(for: KeyCombo("left"), action: .toggleCropTool).isEmpty, "← for Crop Tool (Develop) overrides Previous Photo there")
         store.reassign(KeyCombo("k"), to: .reject)
         check(store.binding(for: .reject) == KeyCombo("k") && store.binding(for: .pick) == nil, "Reassign: Reject = K, Pick has none")

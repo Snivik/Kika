@@ -5,6 +5,86 @@ CI builds the universal app and publishes the top section as its release notes (
 Fix releases bump the patch (0.1.0 → 0.1.1); significant new features bump the minor (→ 0.2.0).
 Newest first; written for people, not commits.
 
+## 0.7.0 — 2026-11-01
+
+**Instagram story layouts match Instagram's**
+- The layouts for story frames are now the ones Instagram's Layout offers, in the same order: a 2 × 2 grid,
+  2 stacked, 3 stacked, 1 on top with 2 below (now split in half, as in Instagram), a 2 × 3 grid, and 2 side by side.
+  Each photo still exports as its own image in its cell's shape, so it drops straight back into the same cell in
+  Instagram.
+- Frames you made with the old "1 large + 2 small" layout keep it, but Instagram can't rebuild it any more, so such a
+  frame now exports as one finished picture, 1080 × 1920, with the gaps and background as on the board. A ⚠ on the
+  frame and its tooltip say so, the Layout menu shows it as old, and the export sheet tells you how many frames were
+  saved this way. Pick one of the new layouts to get the photos separately again.
+
+**Quick Look**
+- Press Space in the Library to look at the selected photo in a large window, as in Finder. It shows the photo with
+  your edits, sized to fit over the main window, with its file name in the title.
+- The arrow keys move through the grid while it's open (↑ / ↓ by row; ⇧ extends the selection), and clicking another
+  photo in the grid shows that one. Space or Esc closes it; F switches to the full-screen preview; double-click opens
+  the photo in Develop.
+- Quick Look zooms out of the photo's thumbnail when it opens and back into it when it closes, crossfades from photo
+  to photo and resizes to each one's shape, as in Finder. The full-screen preview fades in and out. With Reduce
+  motion on (System Settings › Accessibility › Display) it only fades.
+
+**File info**
+- Press ⌘I in the Library (or click ⓘ in the toolbar) for an Info panel on the right with the selected photo's file
+  name, folder, drive, size, type and pixel size (and the cropped size), when it was taken, the camera, lens,
+  exposure and focal length, and when it was imported. With several photos selected it also shows how many and
+  their total size. Show in Finder is at the bottom.
+- In Develop the same info is in a new Info section at the top of the panel (closed until you open it).
+
+**Masks found on the photo**
+- The Masks panel has a new Select row that finds what to mask on your Mac, with Apple's Vision. Nothing leaves the
+  Mac.
+  - Subject: the people, animals and objects in the photo.
+  - Background: everything but the subjects.
+  - People: just the people.
+  - Sky (beta): the sky above the horizon. Vision has no sky detector, so Кика finds it by colour and position; it
+    can take in a pale mountain or miss part of a busy sky, so check it with the overlay.
+  - Object: click a subject on the photo to select only it. Add Object adds another one to the same mask; Pick
+    Again starts over.
+- A new mask is selected with its red overlay on, so you see what was found, and the panel says what it found
+  ("1 subject · 24 % of the photo", or "No people found"). Then use the sliders as with any mask; Invert works too.
+- The mask is found on the photo itself, not your edits, so changing the exposure or white balance never moves it.
+- When you pick an object the pointer turns into a finger, and every object Кика can pick is tinted on the photo, the
+  one under the pointer brighter. Picking goes on until Esc: each click adds another object to the mask, ⌥-click
+  removes one.
+- Expand shrinks or grows what was found (to drop a halo or take in a missed edge) and Feather softens its edge.
+
+**Cleaner masks**
+- Any mask can now be built from several shapes. Add ▾ and Subtract ▾ in the selected mask's options add or remove a
+  Linear or Radial gradient, the Subject, Background, People, Sky or an object: take the sky out of a gradient, or
+  remove a person from Subject. The shapes are listed under the mask; click one to edit it (a gradient gets its
+  own handles on the photo), × removes it.
+- Brush works on every mask, not just brush masks: turn on Brush, then paint to add to the mask and hold ⌥ to erase,
+  with the same Size, Feather and Flow. Use it to clean up what Vision found.
+- While painting, the pointer shows + or −, and it turns to − the moment you press ⌥ (before, it kept showing a plus).
+
+**Clean Up: find photos you can remove**
+- Library › Clean Up (new in the sidebar) finds photos you may not need. It runs on your Mac with Apple's Vision;
+  nothing leaves the Mac and nothing is deleted.
+  - Similar shots: shots taken one after another that look alike (a burst, a few tries at the same scene) are
+    stacked, like on a phone. The sharpest, best-looking one is marked Best; a photo you picked or rated wins. Click
+    shots to mark them Keep or Reject, then press Keep 1, Reject 4 (or Keep All). Double-click a shot for Quick Look.
+  - Blurry: the subject is out of focus or shaken. A soft background behind a sharp subject is fine.
+  - Cropped subjects: a face cut by the edge of the frame, or a head cut off at the top.
+- Run it from Library › Find Photos to Clean Up…, a folder's menu, or the button in Clean Up: on all photos, the
+  previous import, or the folders you tick (with their subfolders). Each check has a sensitivity: Only Obvious,
+  Balanced or More.
+- "Also check photos when importing" (in that window and in the import window's options) runs it after every
+  import, so you can clean up right away.
+- Keep means "it's meant to look like that": Clean Up never suggests that photo again for that reason, in any later
+  run. The Kept tab lists them, and Review Again undoes it. Photos you picked are never suggested.
+- Reject flags the photo as rejected. Library › Rejected lists them, ready for Remove from Catalog….
+- What Clean Up finds is also kept as tags (Blurry, Cropped, Duplicate), so you can filter by them like any tag.
+- Each photo is analysed once; later runs only look at new or edited photos, so they're quick.
+
+**Folders**
+- Dragging a folder in the sidebar works again: drag it onto another folder to put it inside, onto the top or bottom
+  edge of a folder to reorder, or onto the Folders header to move it to the top level. Before, pressing a folder and
+  moving the mouse only changed which folder was selected.
+
 ## 0.6.0 — 2026-10-30
 
 **Photos on several devices**

@@ -55,6 +55,8 @@ final class DevelopSession {
     /// Crop tool UI state (Develop/Crop).
     let cropTool = CropToolState()
     var selectedMaskID: UUID?
+    /// The selected mask's part being edited (nil = its main shape).
+    var selectedPartID: UUID?
 
     /// Before/After (backslash): show the photo with default adjustments (same crop/geometry).
     var showBefore = false {

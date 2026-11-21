@@ -230,7 +230,7 @@ struct InstaPostCard: View {
                 .disabled(post.photoIDs.isEmpty)
             if post.kind == .story {
                 Menu("Add Layout Frame") {
-                    ForEach(InstaLayout.allCases.filter { $0 != .single }, id: \.self) { layout in
+                    ForEach(InstaLayout.offered.filter { $0 != .single }, id: \.self) { layout in
                         Button { InstaActions.addEmptySlide(layout, to: post, model: model) } label: {
                             Label(layout.title, systemImage: layout.systemImage)
                         }

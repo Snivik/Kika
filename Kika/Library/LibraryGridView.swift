@@ -9,7 +9,7 @@
 //  Keys (registry actions via the shortcut dispatcher; defaults): grid focused — arrows move
 //  (up/down by row), ⇧-arrows extend, Return opens Develop, ⌫ removes from the shown folder (or
 //  from the catalog, confirmed); anywhere in Library — ⌘= / ⌘- (also ⌘+) step the thumbnail
-//  size slider. ⌘A / D: LibraryKeyMonitor.swift; P / U / X / G are menu key equivalents.
+//  size slider, ⌘I shows / hides the Info panel (PhotoInfoView.swift), Space toggles Quick Look (FullScreenPreview.swift), whose window the arrows also work in. ⌘A / D: LibraryKeyMonitor.swift; P / U / X / G are menu key equivalents.
 //
 
 import AppKit
@@ -20,6 +20,7 @@ struct LibraryGridView: View {
     @AppStorage(LibraryGridView.cellSizeKey) private var cellSize: Double = 180
     @FocusState private var isGridFocused: Bool
     @State private var keys = GridKeyState()
+    @AppStorage(LibraryInfo.key) private var showsInfo = false
 
     private let spacing: CGFloat = 6
     private let padding: CGFloat = 10
@@ -37,6 +38,9 @@ struct LibraryGridView: View {
         }
         .safeAreaInset(edge: .top, spacing: 0) { GridFilterBar() }
         .safeAreaInset(edge: .bottom, spacing: 0) { bottomBar }
+        .inspector(isPresented: $showsInfo) {   // ⌘I / toolbar ⓘ (PhotoInfoView.swift)
+            LibraryInfoPanel().inspectorColumnWidth(min: 240, ideal: 280, max: 420)
+        }
         .shortcutHandlers { [model, keys] in Self.keyHandlers(model: model, keys: keys) }
         .confirmationDialog(removalTitle, isPresented: Binding(
             get: { keys.pendingCatalogRemoval != nil },
@@ -107,6 +111,8 @@ struct LibraryGridView: View {
                       isFocused: model.focusedPhotoID == photo.id,
                       onTogglePick: { FlagActions.togglePick(photo, model: model) })
             .id(photo.id)
+            .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { GridCellFrames.frames[photo.id] = $0 }
+            .onDisappear { GridCellFrames.frames[photo.id] = nil }
             .onTapGesture(count: 2) { model.openInDevelop(photo.id) }
             .simultaneousGesture(TapGesture().onEnded {
                 let flags = NSEvent.modifierFlags
@@ -145,9 +151,10 @@ struct LibraryGridView: View {
     static let cellSizeStep: Double = 20
 
     private static func keyHandlers(model: AppModel, keys: GridKeyState) -> [ShortcutHandler] {
-        let focused: @MainActor (NSEvent) -> Bool = { _ in keys.isGridFocused }
+        // Arrows also move through the grid from the Quick Look window, as in Finder.
+        let movable: @MainActor (NSEvent) -> Bool = { event in keys.isGridFocused || FullScreenPreview.shared.isQuickLook(event.window) }
         func move(_ action: ShortcutAction, _ delta: @escaping @MainActor () -> Int) -> ShortcutHandler {
-            ShortcutHandler(action, when: focused) { event in
+            ShortcutHandler(action, when: movable) { event in
                 let extend = event.modifierFlags.contains(.shift) && !(ShortcutStore.shared.binding(for: action)?.modifiers.contains(.shift) ?? false)
                 moveFocus(by: delta(), extend: extend, model: model)
             }
@@ -163,6 +170,7 @@ struct LibraryGridView: View {
             ShortcutHandler(.removePhotos, when: { _ in keys.isGridFocused && !model.actionTargetIDs.isEmpty }) { _ in
                 deleteKey(model: model, keys: keys)
             },
+            ShortcutHandler(.toggleInfo) { _ in LibraryInfo.toggle() },
             ShortcutHandler(.thumbnailLarger) { _ in stepCellSize(up: true) },
             ShortcutHandler(.thumbnailSmaller) { _ in stepCellSize(up: false) },
         ]
@@ -237,6 +245,12 @@ struct LibraryGridView: View {
             }
         }
     }
+}
+
+/// Where the grid's cells are (SwiftUI global space of the main window), for Quick Look's zoom from / into the
+/// thumbnail (FullScreenPreview.swift). Only cells the lazy grid has built.
+enum GridCellFrames {
+    static var frames: [Int64: CGRect] = [:]
 }
 
 private struct GridScrollIdentity: Hashable {

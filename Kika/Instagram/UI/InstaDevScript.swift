@@ -9,7 +9,7 @@
 //    insta addf <post> <name,name…>        add pool photos by file name (without extension) as slides
 //    insta fillf <post> <slide> <cell> <name,name…>   pool photos by file name into cells
 //    insta title <post> <text…>
-//    insta layout <post> <slide> <layout>  single | stack2 | side2 | stack3 | grid4 | feature3
+//    insta layout <post> <slide> <layout>  single | grid4 | stack2 | stack3 | topBottom3 | grid6 | side2 | feature3 (old)
 //    insta fill <post> <slide> <cell> <first> <count>   pool photos into cells
 //    insta split <post> <slide> <n>        split across n slides
 //    insta frame <post> <slide> <cell> <scale> <offsetX> <offsetY> [rotation]   a cell's transform

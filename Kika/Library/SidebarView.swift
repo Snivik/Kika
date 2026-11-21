@@ -11,7 +11,8 @@
 //    "Create Folder" on empty space) create "Untitled Folder", scroll it into view and start an
 //    inline rename (Enter commits, Esc cancels, clicking away commits).
 //  - Double-click (or context menu "Rename") renames; ⌫ (registry action) / "Delete Folder…" asks for confirmation.
-//  - Drag a folder onto a folder to nest it, onto the top / bottom edge of a row to reorder,
+//  - Drag a folder (started in AppKit, Sidebar/FolderRowDragging.swift: the List never starts row drags)
+//    onto a folder to nest it, onto the top / bottom edge of a row to reorder,
 //    onto the "Folders" header to move it to the top level; or context menu "Move To ▸" (Top Level or
 //    any folder outside its own subtree, appended). Drag photos from the grid onto a
 //    folder to add them (hold ⌘ to move them out of the shown folder, ⌥ to drop virtual copies;
@@ -111,6 +112,8 @@ struct SidebarView: View {
                 InstaCalendarRow()   // Instagram/UI/InstaPlanRow.swift
                     .tag(SidebarItem.instaCalendar)
             }
+            CleanupSidebarRow()   // Cleanup/UI/CleanupRunSheet.swift
+                .tag(SidebarItem.cleanup)
     }
 
     private var foldersSection: some View {
@@ -150,6 +153,7 @@ struct SidebarView: View {
                 InstaActions.showPlan(folderID: id, model: model)
             }
             Button("Move Photos to Device…") { FolderActions.moveToDevice(id, model: model) }
+            Button("Find Photos to Clean Up…") { CleanupStore.shared.presentRunSheet(folderIDs: [id]) }   // Cleanup/UI
             Divider()
             Button("Delete Folder…") { FolderActions.requestDelete(id, model: model) }
         } else if case .plan(let id)? = items.first, let plan = InstaStore.shared.plan(id) {

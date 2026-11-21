@@ -14,12 +14,34 @@ import Observation
 final class MaskToolState {
     static let shared = MaskToolState()
 
-    /// Shape the next drag on the canvas creates (nil = edit the selected mask).
+    /// Shape the next drag on the canvas creates (nil = edit the selected mask). `.object`: clicks pick objects.
     var pendingKind: MaskKind?
+    /// The creation goes into this mask as a part (Add / Subtract), or as more objects (Add Object), instead of
+    /// making a new mask.
+    var addingTo: UUID?
+    /// How that part combines; ⌥ flips it while picking objects.
+    var addMode: MaskPart.Mode = .add
+    /// Paint on the selected mask whatever its kind (its brush part); a brush mask always paints.
+    var refining = false
     /// Red overlay of the selected mask's coverage (O).
     var showOverlay = false
     /// Paint eraser strokes (also while ⌥ is held).
     var eraseMode = false
+    /// ⌥ is down (the overlay watches the modifier keys): erase while painting, subtract while picking.
+    var optionHeld = false
+
+    /// Ends a pending creation (Esc, selecting a mask).
+    func cancelPending() {
+        pendingKind = nil
+        addingTo = nil
+        addMode = .add
+    }
+
+    /// Pick Object: does a click now remove the object (⌥ flips Add / Subtract when adding to a mask)?
+    var picksToSubtract: Bool {
+        guard pendingKind == .object, addingTo != nil else { return false }
+        return (addMode == .subtract) != optionHeld
+    }
 
     /// Brush size 1...100, a SCREEN size (Lightroom): the cursor radius is
     /// `brushSize × screenPointsPerSize` view points at any zoom. Each stroke stores its radius

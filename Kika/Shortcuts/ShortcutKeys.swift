@@ -327,7 +327,7 @@ final class ShortcutDispatcher {
         guard let window = event.window, window.attachedSheet == nil, !window.isSheet,
               !TextInputGuard.isEditing(in: window) else { return nil }
         let fs = FullScreenPreview.shared
-        if fs.isShowing, window === fs.window { return .fullScreen }
+        if fs.isShowing, window === fs.window { return fs.style == .quickLook ? .quickLook : .fullScreen }
         guard !(window is NSPanel), mainWindow == nil || window === mainWindow, let model else { return nil }
         guard model.mode == .develop else { return .library }
         guard let session = model.developSession else { return .develop }
@@ -403,6 +403,7 @@ extension View {
         .onAppear {
             ShortcutDispatcher.shared.install(model: model)
             StuckDragGuard.install()   // App/StuckDragGuard.swift
+            FolderRowDragging.install()   // Library/Sidebar/FolderRowDragging.swift
         }
     }
 }

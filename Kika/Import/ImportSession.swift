@@ -565,6 +565,7 @@ final class ImportSession {
                 }
                 ImportJob.warmPreviews(photoIDs: result.photoIDs)
                 await MainActor.run {
+                    CleanupStore.shared.importFinished(photoIDs: result.photoIDs)   // Cleanup/UI (if turned on)
                     var summary = base
                     summary.result = result
                     self.finish(summary)

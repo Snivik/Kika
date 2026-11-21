@@ -57,6 +57,13 @@ check tags_check "$OUT/tags-run" $APP/App/FolderTree.swift
 check insta_check "$OUT/insta-run" $APP/Instagram/InstaModels.swift $APP/Instagram/Catalog+Insta.swift
 
 # Draws its own test photos.
+# Draws its own photo; runs Vision.
+check aimasks_check "$OUT/aimasks-run"
+
+# Draws its own photos; runs Vision.
+check cleanup_check "$OUT/cleanup-run" $APP/Cleanup/CleanupModels.swift $APP/Cleanup/CleanupAnalyzer.swift \
+  $APP/Cleanup/CleanupJob.swift $APP/Cleanup/Catalog+Cleanup.swift $APP/VirtualCopies/Catalog+VirtualCopies.swift
+
 check insta_export_check "$OUT/insta-export-run" $APP/Instagram/InstaModels.swift $APP/Instagram/Catalog+Insta.swift \
   $APP/Instagram/InstaExport.swift $APP/Export/ExportEngine.swift $APP/Develop/Crop/CropMath.swift
 

@@ -54,6 +54,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Kik
 | `CatalogTransfer/*` | Export Catalog / Import Catalog (engine `CatalogTransfer.swift`; controller, sheet + `CatalogTransferCommands`, DevScript) |
 | `VirtualCopies/*` | virtual copies: catalog API (`Catalog+VirtualCopies.swift`), preview seeding (`VirtualCopyPreviews`), actions / badge / rename alert (`VirtualCopyActions`), drop verbs (`PhotoDropVerb`), DevScript `vc …` |
 | `Devices/*` | devices (where files live) and Move to Device: catalog API (`Catalog+Devices`: summaries, folders per device, `relocatePhotos`), copy-verify-relocate job (`DeviceMove`); `Devices/UI/`: `DeviceStore`, sheet + controller, DevScript `device …`. `PhotoDevice` itself is in `Catalog/` (`PhotoFilter.device`) |
+| `Cleanup/*` | Clean Up (similar shots, blurry / cropped subjects): models + grouping (`CleanupModels`), Vision + Accelerate analyser (`CleanupAnalyzer`), run job (`CleanupJob`), catalog API (`Catalog+Cleanup`); `Cleanup/UI/`: store, review view, run sheet + sidebar row, actions, DevScript `cleanup …` |
 | `Actions/*` | photo actions primitive: registry (`PhotoActionSpec` UI-free + `PhotoActions`), every menu surface (`PhotoActionMenus`), bulk edits with one undo step (`BulkEditor`, engine `Catalog+BulkEdits`), Bulk Crop (`BulkCrop` math + sheet), Paste / Sync section checklist (`EditSections`, `SettingsSectionsSheet`), window UI (`PhotoActionUI`), DevScript `act …` |
 
 Conventions: new catalog API as `nonisolated extension Catalog` in the feature's own
@@ -392,15 +393,16 @@ View / Help > Keyboard Shortcuts…). Never hard-code a key in a handler or a to
 | Develop (`developMode`) | D | Everywhere | menu + dispatcher handler (AppKit's Start Dictation takes plain D) — `LibraryKeyMonitor` |
 | Select All Photos (`selectAllPhotos`) | ⌘A (was ⌥⌘A in the menu) | Library & Develop | dispatcher (`LibraryKeyMonitor`); the menu item shows no key (SwiftUI drops the duplicate of Edit > Select All) |
 | Full Screen Preview (`fullScreenPreview`) | F | Everywhere (opens from the main window, closes in full screen) | `FullScreenShortcut` (FullScreenPreview.swift) + `FullScreenPreview.installKeys` |
-| Close Full Screen Preview (`exitFullScreen`) | Esc | Full Screen | `FullScreenPreview.installKeys` |
+| Quick Look (`quickLook`) | Space | Library & Quick Look (opens on the grid's focused photo, closes from either window) | `FullScreenShortcut` + `FullScreenPreview.installKeys` (style `.quickLook`; F there switches to full screen) |
+| Close Preview (`exitFullScreen`) | Esc | Full Screen & Quick Look | `FullScreenPreview.installKeys` |
 | Previous / Next Photo | ← / → | Develop & Full Screen | `DevelopCanvasView` (not while the sidebar list has focus), `FullScreenPreview` |
 | Zoom Fit ↔ 1:1 at the pointer, Zoom In, Zoom Out (next / previous preset, also from a free pinch level) | Z, ⌘= (⌘+), ⌘- (⌘_) | Develop & Full Screen | `ZoomEventMonitor` (handlers per ZoomController / window) |
 | Zoom to Fit (`zoomFit`) | ⌘0 | Develop & Full Screen | `ZoomEventMonitor` |
 | Show / Hide Folders (`toggleSidebar`) | ⌃⌘S | Everywhere (menu View > Show / Hide Folders; the toolbar sidebar button and the view bar button do the same) | menu (`KikaCommands` → `DevelopPanels.toggleSidebar(in:)`, per mode) |
-| Hand Tool (hold) (`temporaryHand`) | Space | Develop & Full Screen | `ZoomEventMonitor` (key-up releases) |
+| Hand Tool (hold) (`temporaryHand`) | Space | Develop & Full Screen (Quick Look has its own context, so Space closes it there) | `ZoomEventMonitor` (key-up releases) |
 | Show / Hide Side Panels, All Panels | Tab, ⇧Tab | Develop | `DevelopPanels` (`developPanelShortcuts`) |
 | Increase / Decrease Thumbnail Size | ⌘= (⌘+) / ⌘- (step 20 pt of the 100…400 slider) | Library | `LibraryGridView` |
-| Select Previous / Next Photo, Photo Above / Below (`moveLeft/Right/Up/Down`) | ← → ↑ ↓ (⇧ extends) | Library, grid focused | `LibraryGridView` |
+| Select Previous / Next Photo, Photo Above / Below (`moveLeft/Right/Up/Down`) | ← → ↑ ↓ (⇧ extends) | Library (grid focused) & Quick Look | `LibraryGridView` |
 | Open in Develop | Return | Library, grid focused | `LibraryGridView` |
 | Remove from Folder / Catalog (`removePhotos`) | ⌫ (⌦) | Library, grid focused | `LibraryGridView` (catalog removal asks first) |
 | Delete Folder (sidebar) (`deleteFolder`) | ⌫ | Library & Develop, sidebar list focused | `SidebarView` (asks first) |
@@ -440,6 +442,11 @@ pinch (free-form) / two-finger double tap (smart magnify: Fit ↔ 100 %) / ⌘- 
   drops a real filmstrip drag payload through SwiftUI's drop destination).
 - In-app drag & drop: plain-text `KikaDragPayload` (`kika-drag:photos:1,2` / `…folder:7`)
   in an `NSItemProvider` via `KikaDrag.provider(_:)`; drop targets decode it with `KikaDrag.load`.
+  Sidebar folder rows are the exception as a source: SwiftUI's sidebar List never asks a row's `itemProvider` for a
+  drag (pressing and moving selects rows instead), so `FolderRowDragging` (a local mouse monitor) holds back a plain
+  mouse-down on a row marked by `FolderRowMarker`, starts an `NSDraggingSession` with the same plain-text payload
+  after 4 pt, or replays the click to the List as fresh events (selection, double-click rename and focus unchanged).
+  DevScript `qclick` / `qdclick` queue clicks in real order to check that path.
 - Photos dropped on a folder row (`PhotoDropVerb`, Finder-like): plain = **Add** (same photo; proposal
   `.alias`), ⌘ = **Move** out of the shown folder (only while another folder is shown; `.move`), ⌥ =
   **Copy** = new virtual copies inside the target (`.copy`). The hovered row shows an Add / Move / Copy
@@ -515,13 +522,18 @@ survives saving).
 | `colorMixer` | `subscript[ColorBand] -> HSLAdjustment {hue, saturation, luminance -100…100}`; bands `red orange yellow green aqua blue purple magenta`; JSON `{"bands":{"red":{…}}}`, default bands omitted |
 | `effects` | `vignetteAmount` -100…100, `vignetteMidpoint` 0…100 (50), `vignetteRoundness` -100…100, `vignetteFeather` 0…100 (50), `grainAmount` 0…100, `grainSize` 0…100 (25), `grainRoughness` 0…100 (50) |
 | `geometry` | `quarterTurns` 0…3 clockwise, `flipHorizontal`, `straightenAngle` -45…45° clockwise, `crop: NormRect` (full), `cropPresetID: Int64?`, `aspectLocked` |
-| `masks: [Mask]` | `Mask {id, name, isEnabled, inverted, shape: MaskShape, adjustments: LocalAdjustments}` applied in order |
+| `masks: [Mask]` | `Mask {id, name, isEnabled, inverted, shape: MaskShape, parts: [MaskPart], adjustments: LocalAdjustments}` applied in order |
 | `decode` | `DecodeSettings {profileID: Int64?, overrides: DecodeParams, decoderVersion: String?}` — RAW decode calibration, see Decode profiles. `isDefault` ignores `decoderVersion` (a pin alone isn't an edit, but makes the settings non-empty) |
 
 - `MaskShape`: `.linear(LinearGradientMask {start, end})` (full effect at start → none at end),
   `.radial(RadialGradientMask {center, radiusX (× source width), radiusY (× source height), rotation° clockwise, feather 0…100})`,
-  `.brush(BrushMask {strokes: [BrushStroke {points, radius (× source width), feather, flow 0…100, isEraser}]})`.
-  JSON: `{"kind":"radial","radial":{…}}`.
+  `.brush(BrushMask {strokes: [BrushStroke {points, radius (× source width), feather, flow 0…100, isEraser}]})`,
+  `.ai(AIMask {target: subject | background | people | sky | object, points (object picks), expand -100…100, feather 0…100})`
+  (found by Vision, never stored as pixels). JSON: `{"kind":"radial","radial":{…}}`. `masks` decodes lossily: a mask this
+  build can't read (unknown kind) is skipped, the rest stay; so are parts.
+- `MaskPart {id, mode: add | subtract, shape: MaskShape}`: more shapes combined with the main one, in order — add =
+  max(mask, part), subtract = mask × (1 − part); a brush part paints AND erases (its eraser strokes remove from
+  everything before it: max(mask × (1 − erasers), strokes)), whatever its mode. `inverted` applies to the result.
 - `LocalAdjustments`: `temperature tint exposure contrast highlights shadows whites blacks texture clarity dehaze saturation`,
   all -100…100 except `exposure` -4…4 EV.
 - Static ranges: `WhiteBalance.temperatureRange/tintRange`, `Tone.exposureRange/range`, `Presence.range`,
@@ -679,6 +691,45 @@ trailing actions); rows are included only while shown. Remembered in `sidebar.se
   in memory (`TagValues.satisfies`, the twin of `tagSQL`) via `FolderTree.filtered`: matches plus their ancestors
   (dimmed), all expanded.
 
+## Clean Up (`Cleanup/`, harness `Tools/cleanup_check.swift`, tuning `Tools/cleanup_tune.swift`)
+
+- **Results are tag values** by the workflow author `CleanupTags.author` (`workflow:cleanup`) on three tags made on
+  demand (`Catalog.cleanupTagIDs`, found by name; a same-named user tag gets true / false added): Blurry, Cropped,
+  Duplicate. The workflow writes "true" when it flags a photo and **removes its own value** otherwise (never "false":
+  the Tags sidebar's To Review would count every analysed photo). Picked photos are never flagged.
+- **Kept by you = your own value "false"** (Tags rule: the user's value always wins). Later runs still rewrite the
+  workflow row but it's never effective again, so a kept photo never returns; Review Again clears your value. Reject =
+  your "true" + `Flag.reject` (files untouched; Library › Rejected → Remove from Catalog…). To review =
+  `TagMatch.toReview("true")`; kept = your "false" over a workflow "true" (`cleanupKeptPhotoIDs`).
+- **Tables** (migration `cleanup.v1`, cascade with photos): `cleanup_analysis(photo_id PK, version, edit_version,
+  sharpness, crop_score, crop_reason, quality, feature BLOB (Float32), analyzed_at)` — redone when
+  `CleanupAnalyzer.version` or the photo's edit version changes, so re-runs and sensitivity changes are cheap;
+  `cleanup_groups(photo_id PK, group_id = smallest photo id, position, is_best)` — a run replaces the rows of its photos.
+  A group is up for review while one of its photos has a Duplicate value to review.
+- **Analyser** (`CleanupAnalyzer.analyze`, ~65–100 ms per photo): image = the photo as edited (crop included) when it
+  has edits, else its embedded preview (≥ 70 % of 2048 px) / a fast decode, 2048 px long. Sharpness = mean RMS of the
+  sharpest 15 % of 64 px tiles of second differences along x, y and both diagonals, the WEAKEST direction (catches
+  shake), on the subject: faces inside the frame, else attention-saliency boxes, else the frame; mapped by
+  r²/(r²+6²). Calibrated on the owner's photos: sharp ≥ ~0.4 (p5 0.48), 1 px blur at 2048 → ~0.31, 2 px ≤ 0.14, a 6 px
+  shake 0.02; thresholds 0.12 / 0.2 / 0.3. Crop score: face rects touching the frame (sides / chin 0.8+, forehead
+  0.5+), body pose with neck / shoulders at the top and no head joints (0.9), people / animal slices at a side
+  (0.45–0.5); thresholds 0.85 / 0.6 / 0.4. Quality = `VNCalculateImageAestheticsScoresRequest`; feature print =
+  `VNGenerateImageFeaturePrintRequest`.
+- **Grouping** (`CleanupGrouping.groups`, pure): sort by capture (else import) date; chain neighbours ≤ `maxGapSeconds`
+  (120) apart whose feature distance ≤ `similarDistance` (0.25 / 0.33 / 0.42) × gap allowance (≤ 2 s × 1.15, ≤ 10 s × 1,
+  else × 0.85) × 2 when either is blurry and ≤ 10 s apart, and ≤ 1.25 × of the group's first (no pan chains). Burst
+  frames measure 0.1–0.3, another person on the same spot 0.37–0.5. Keeper = picked > not rejected > kept by you >
+  stars > quality + 1.5 × sharpness.
+- **Job** (`CleanupJob.run`, off-main, cancellable): masters only, 3 workers (`concurrentPerform`), each analysis
+  saved at once (a cancelled run keeps them), then verdicts + groups. Offline photos are skipped and counted.
+- **UI**: `CleanupStore` (options + `cleanup.onImport` in UserDefaults; runs queued one at a time; review lists
+  reloaded on `.photoTags` / `.photosUpdated` / `.photosInsertedOrRemoved` / `.tags`). Sidebar Library › Clean Up
+  (`SidebarItem.cleanup` → `AppModel.showsCleanup` over All Photographs with no filter, so Quick Look / Develop find
+  every photo) shows `CleanupReviewView` (tabs Similar Shots / Blurry / Cropped / Kept). Run sheet
+  (`.cleanupSupport`): All Photographs / Previous Import / ticked folders with subfolders, checks + sensitivities,
+  on-import toggle; opened from Library › Find Photos to Clean Up…, the folder context menu, the review header.
+  Imports call `CleanupStore.importFinished(photoIDs:)` (also a toggle in the import window's Options).
+
 ## Instagram plans (`Instagram/`, harness `Tools/insta_check.swift`)
 
 - A folder has at most one plan (`insta_plans.folder_id` UNIQUE). A plan holds posts (`kind` post = carousel) and story
@@ -691,7 +742,11 @@ trailing actions); rows are included only while shown. Remembered in `sidebar.se
   Migration `insta.v1`; everything cascades from folders and photos. Writes post `.insta`.
 - Shapes: posts 4:5 (default), 3:4, 1:1, one per carousel; stories 9:16 (`InstaAspect.pixelSize`, 1080 wide).
   Layouts: `InstaLayout.cellRects(in:gap:)` (unit rects, outer margin = gap = inner gap), shared by the board and
-  the coming export.
+  export. `InstaLayout.offered` = single + Instagram's story Layout set in its picker order (2 × 2, 2 stacked,
+  3 stacked, 1 top + 2 bottom halves, 2 × 3, 2 side by side); the menus offer only these. `isLegacy` layouts (`feature3`:
+  1 large two-thirds + 2 small) stay readable on old frames, show a ⚠ badge on the board, and export as one whole-frame
+  picture at the post's size (`InstaExportImage(frame:)`, `InstaExportRenderer.compose`) instead of one image per cell;
+  the export sheet says how many (`InstaExportJob.wholeFrameCount`).
 - Split = a single-photo post slide with `span` n > 1: it is drawn n frames wide and exports as n slides. A carousel
   is limited to 20 exported slides (`InstaError.carouselFull`); a multi-cell layout or a move into stories resets span.
 - Used = the photo is in any cell. `Catalog.instaUsage()` → labels per post ("P2", "S1", numbered per kind in board
@@ -805,11 +860,38 @@ built-in (Apple's per-file defaults + DecodeParams.builtin)
 - Engine: `MaskRenderer` (shape → grayscale mask over the pre-geometry image; linear / radial
   gradients, brush via `BrushRasterizer` with an incremental cache), `MaskEditing` (brush point
   decimation, names, pins). Masks live in source space, so they stay on the content under crop/rotate.
+- Parts: `MaskRenderer.combine` (see `MaskPart`). The selected shape is `session.selectedRef` (`MaskRef {mask, part?}`,
+  `selectedPartID` nil = the main shape): its handles are drawn and dragged, `updateShape(ref)` edits it. Brush strokes go
+  to `Mask.brushTarget` (the main shape of a brush mask without parts, else the last part when it is a brush, else a
+  new brush part) so they apply after every part before them; any mask paints while `MaskToolState.refining` (panel
+  Brush toggle, Add / Subtract ▸ Brush). Add ▾ / Subtract ▾ (`beginAddingPart`): found shapes at once, Linear / Radial
+  by a drag (`MaskToolState.addingTo` + `addMode`), Object by clicks. Part pins (small squares with + / −) for the
+  selected mask's parts.
 - UI: `DevelopSession+Masks` (add / update / delete / select / `finishMasking`), `MaskToolState.shared`
-  (pending creation kind, brush settings, overlay toggle; **brush size is a screen size**: cursor radius
+  (pending creation kind, brush settings, overlay toggle, `optionHeld` from a flagsChanged monitor so the pointer
+  shows − as soon as ⌥ goes down; **brush size is a screen size**: cursor radius
   `brushSize × 2.5` pt at any zoom, each new stroke stores `brushRadius(in: geometry)` = that screen radius
   in image-width units at the zoom it was painted, so zoomed-in strokes are finer; stored strokes unchanged), `MaskInteraction` (drag handling in source
   pixels via `MaskSpace` → `CanvasGeometry`), `MaskCoverageRenderer` (red overlay, off-main).
+- AI masks (`AIMasks.swift`, `MaskShape.ai`): `AIMaskEngine` renders the photo with DEFAULT settings, oriented and
+  uncropped (= mask space), 1536 px long, and runs Vision on it: Subject = all foreground instances
+  (`VNGenerateForegroundInstanceMaskRequest`, soft), Background = its inverse, People =
+  `VNGeneratePersonSegmentationRequest` (accurate), Object = the instances under the picked points (label map, nearest
+  within 3 %), Sky = `SkyFinder` (Vision has none: smooth blue / neutral / bright cells connected to the top edge,
+  flood-filled at ~256 px with subjects excluded, refined per pixel by distance to the found sky colour; "beta").
+  8-bit raster cached in memory (LRU 160 MB) per (file, size, target, points), one analysis at a time; scaled into
+  renders like brush rasters. Needs `RenderContext.source` (set by `RenderPipeline.render` / `RegionRenderer`; the
+  coverage overlay passes the session's), else empty. `AIMaskStatus` (@Observable) holds computing / found / failed per
+  key for the panel; `prepare` computes off-main as soon as a mask is made or shown (renders skip masks without
+  adjustments). Expand / Feather are applied at render time (`AIMaskEngine.refined`: rectangle morphology up to 2 % of
+  the width, then a blur up to 1.5 %), so moving them never re-runs Vision. UI: Masks panel "Select" row (Subject,
+  Background, People, Sky, Object), `addAIMask` (selects it, turns the overlay on), Pick Object =
+  `beginPickingObject(adding:mode:)` + clicks (`MaskInteraction.pickObject`): the first click makes the mask, picking
+  goes on (Esc ends) and each click adds the object, ⌥-click removes it (an object part of the other mode). The
+  pointer is a finger with + / − (`CanvasCursor.pick`); the brush shows + / − in its circle (`CanvasCursor.brush`).
+  While picking, `ObjectPreviewRenderer` tints every instance Vision finds (`AIMaskEngine.objects`: label map + one
+  raster per instance, cached per photo) in displayed space, the one under the pointer brighter. DevScript `maskai …`,
+  `maskaistatus`, `maskpart`. Harness `Tools/aimasks_check.swift` (CI).
 - Harness: `Tools/masks_check.swift`.
 
 ## Crop & rotate (`Develop/Crop/*`, `Stages/GeometryStage`, `Panels/CropPanel`, `Overlays/CropOverlayView`)
@@ -830,7 +912,8 @@ Created by AppModel for the photo in Develop (`model.developSession`).
   coalesced off-main re-render (one in flight, latest wins), undo step (changes within 0.6 s grouped).
 - `renderedImage: CGImage?` (preview placeholder first, `isPlaceholder`), `renderedWithCrop`,
   `isLoading`, `loadError`
-- `activeTool: DevelopTool (.none/.crop/.mask)` — `.crop` re-renders WITHOUT crop; `selectedMaskID: UUID?`
+- `activeTool: DevelopTool (.none/.crop/.mask)` — `.crop` re-renders WITHOUT crop; `selectedMaskID: UUID?`,
+  `selectedPartID: UUID?` (the selected mask's part being edited, nil = its main shape)
 - `viewPixelSize` (set by the canvas), `requestRender()`
 - `undo()`, `redo()`, `canUndo`, `canRedo`, `commitUndoGroup()` (call at drag end), `resetAll()`
 - `undoDepth` (steps recorded and not undone, incl. ones dropped beyond 200) and `adoptExternalSettings(_:)` (shows

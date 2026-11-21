@@ -7,7 +7,8 @@
 //  and sidebar interaction headlessly:
 //    key <spec>      e.g. key p | key cmd+shift+n | key shift+right | key delete | key return | key escape
 //    type <text>     types characters (one key event each)
-//    click <x> <y>   left click at window point (top-left origin, points); `dclick` = double click
+//    click <x> <y>   left click at window point (top-left origin, points); `dclick` = double click;
+//                    `qclick` / `qdclick` queue every event in real order (what the sidebar's folder drag sees)
 //    dump            prints source / filter / selection / folders / first responder
 //
 
@@ -17,7 +18,9 @@ import Foundation
 
 enum FoldersDevScript {
     static func run(_ command: String, _ arg: String, model: AppModel) {
-        guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && !($0 is NSPanel) }) else {
+        // The main window (not Quick Look / full screen, which are visible non-panel windows too).
+        guard let window = ShortcutDispatcher.shared.mainWindow
+                ?? NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil && !($0 is NSPanel) }) else {
             print("DevScript: no window"); return
         }
         if !window.isKeyWindow { window.makeKeyAndOrderFront(nil) }
@@ -28,6 +31,19 @@ enum FoldersDevScript {
             let xy = arg.split(separator: " ").compactMap { Double($0) }
             guard xy.count == 2 else { print("DevScript: click x y"); return }
             click(CGPoint(x: xy[0], y: xy[1]), count: command == "dclick" ? 2 : 1, window: window)
+        case "qclick", "qdclick":
+            // Every event through the queue in real order (down, up, down, up), as the mouse delivers them.
+            let xy = arg.split(separator: " ").compactMap { Double($0) }
+            guard xy.count == 2 else { print("DevScript: qclick x y"); return }
+            let location = CGPoint(x: xy[0], y: window.frame.height - xy[1])
+            for n in 1...(command == "qdclick" ? 2 : 1) {
+                for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                    if let e = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                                  windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: n, pressure: 1) {
+                        NSApp.postEvent(e, atStart: false)
+                    }
+                }
+            }
         case "dump": dump(model, window: window)
         case "action":
             // Nil-targeted action as a key window would dispatch it (walks the responder chain).

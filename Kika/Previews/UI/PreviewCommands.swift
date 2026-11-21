@@ -16,6 +16,11 @@ struct PreviewCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Library") {
+            Button("Find Photos to Clean Up…") {   // Cleanup/UI: the shown folder preselected
+                CleanupStore.shared.presentRunSheet(folderIDs: model.shownFolderID.map { [$0] } ?? [])
+            }
+            Button("Show Clean Up") { model.mode = .library; model.selectSidebarItem(.cleanup) }
+            Divider()
             PreviewMenu(model: model)
         }
     }

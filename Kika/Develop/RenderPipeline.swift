@@ -110,6 +110,8 @@ nonisolated struct RenderContext: Sendable {
     /// The context that will draw this render. Stages use it to eagerly render tiny intermediates
     /// (blurred bases), which keeps full-resolution renders from recomputing the whole graph per tile.
     var ciContext: CIContext = RenderPipeline.context
+    /// The photo being rendered: AI masks (Masking/AIMasks.swift) analyse it. nil = they render empty.
+    var source: RenderSource? = nil
 
     /// Top-left normalized point (mask space) -> CI coordinates (bottom-left origin) of the
     /// pre-geometry image.
@@ -207,7 +209,7 @@ nonisolated enum RenderPipeline {
         let ctx = RenderContext(fullSize: source.orientedSize, imageSize: image.extent.size,
                                 draft: draft || source.draft, applyCrop: applyCrop, requestedScale: scale * min(proxyScale, 1),
                                 seed: source.seed, extendedRange: source.isRAW,
-                                decode: source.resolvedDecode(settings), ciContext: ciContext)
+                                decode: source.resolvedDecode(settings), ciContext: ciContext, source: source)
         return applyStages(image, settings: settings, context: ctx)
     }
 

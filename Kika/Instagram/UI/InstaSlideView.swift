@@ -8,7 +8,8 @@
 //  under the pointer and the ones after it (a single-photo slide is replaced). A dragged slide moves before / after.
 //  Drag the slide to move it; double-click (or Adjust Photos… in the menu) to scale, rotate and move its photos
 //  (InstaAdjustSheet). Context menu: adjust, layout, split, background, remove photo, delete slide, open in Develop,
-//  Export Slide… (InstaExportSheet).
+//  Export Slide… (InstaExportSheet). A frame in a layout Instagram no longer offers (`InstaLayout.isLegacy`) shows a
+//  badge: it exports as one picture until another layout is chosen.
 //
 
 import AppKit
@@ -66,6 +67,7 @@ struct InstaSlideView: View {
         HStack(spacing: 3) {
             Text("\(index + 1)").monospacedDigit()
             if slide.span > 1 { Image(systemName: "scissors"); Text("×\(slide.span)") }
+            if slide.layout.isLegacy { Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow) }
         }
         .font(.caption2.weight(.semibold))
         .padding(.horizontal, 4).padding(.vertical, 1)
@@ -98,10 +100,16 @@ struct InstaSlideView: View {
             .disabled(locked || slide.cells.isEmpty)
         Divider()
         Menu("Layout") {
-            ForEach(InstaLayout.allCases, id: \.self) { layout in
+            ForEach(InstaLayout.offered, id: \.self) { layout in
                 Toggle(isOn: Binding(get: { slide.layout == layout }, set: { if $0 { InstaActions.setLayout(layout, of: slide, model: model) } })) {
                     Label(layout.title, systemImage: layout.systemImage)
                 }
+            }
+            if slide.layout.isLegacy {
+                Divider()
+                Toggle(isOn: .constant(true)) { Label(slide.layout.title, systemImage: slide.layout.systemImage) }
+                    .disabled(true)
+                Text("Not in Instagram any more: exports as one picture")
             }
         }
         .disabled(locked)
@@ -135,6 +143,7 @@ struct InstaSlideView: View {
         Button("Export Slide…") { InstaActions.exportSlide(slide, of: post, model: model) }
             .disabled(photoIDs.isEmpty)
             .help(slide.span > 1 ? "Save the \(slide.span) strips of this split as images"
+                  : slide.layout.isLegacy ? "Save this frame as one picture (its layout isn't in Instagram any more)"
                   : photoIDs.count > 1 ? "Save each photo of this layout as its own image" : "Save this slide as an image")
         Divider()
         if slide.layout != .single {
@@ -160,6 +169,10 @@ struct InstaSlideView: View {
         let names = slide.photoIDs.compactMap { store.photos[$0]?.displayTitle }
         var lines = [names.isEmpty ? "Empty" : names.joined(separator: ", ")]
         if slide.span > 1 { lines.append("Split into \(slide.span) slides on export") }
+        if slide.layout.isLegacy {
+            lines.append("Old layout: Instagram doesn't offer it any more, so this frame exports as one picture."
+                         + " Choose a layout in the Layout menu to export each photo on its own.")
+        }
         if !post.isLocked {
             lines.append("Double-click to scale, rotate and move the photos")
             lines.append("Drop photos on the edges to insert, in the middle to replace · drag to move")

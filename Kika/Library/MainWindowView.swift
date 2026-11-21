@@ -20,7 +20,8 @@ struct MainWindowView: View {
         } detail: {
             switch model.mode {
             case .library:
-                if model.showsInstaCalendar { InstaCalendarView() }   // Instagram/UI
+                if model.showsCleanup { CleanupReviewView() }   // Cleanup/UI
+                else if model.showsInstaCalendar { InstaCalendarView() }   // Instagram/UI
                 else if model.selectedPlanID != nil { InstaBoardView() } else { LibraryGridView() }
             case .develop: DevelopView()
             }
@@ -36,6 +37,7 @@ struct MainWindowView: View {
         .virtualCopySupport(model: model)   // Rename Virtual Copy alert (VirtualCopies/)
         .photoActionSupport(model: model)   // bulk sheets, confirmations, progress (Actions/)
         .tagEditorSupport(model: model)   // New / Edit Tag sheet, delete confirmation (Tags/)
+        .cleanupSupport(model: model)   // Find Photos to Clean Up… sheet (Cleanup/UI)
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Picker("Mode", selection: $model.mode) {
@@ -55,6 +57,14 @@ struct MainWindowView: View {
                     PhotoActionsToolbarMenu(model: model)   // Actions/: every photo action in Develop
                 }
             }
+            if model.mode == .library && !model.showsInstaCalendar && !model.showsCleanup && model.selectedPlanID == nil {
+                ToolbarItem {
+                    Button { LibraryInfo.toggle() } label: {
+                        Label("Info", systemImage: "info.circle")
+                    }
+                    .help(store.help("Show / Hide Info", .toggleInfo))
+                }
+            }
             ToolbarItem {
                 PreviewActivityView()
                     .padding(.leading, 6)   // the ring otherwise touches the toolbar capsule's edge (macOS 26)
@@ -72,6 +82,7 @@ struct MainWindowView: View {
             "Flag Filter": "Show filmstrip photos by flag",
             "Photo Actions": PhotoActionsToolbarMenu.help(model),
             "Import": store.help("Import Photos…", .importPhotos),
+            "Info": store.help("Show / Hide Info", .toggleInfo),
         ])
         .sheet(item: $model.presentedSheet) { kind in
             switch kind {
@@ -94,6 +105,7 @@ struct MainWindowView: View {
     }
 
     private var title: String {
+        if model.showsCleanup { return "Clean Up" }
         if model.showsInstaCalendar { return "Calendar" }
         if let planID = model.selectedPlanID, let plan = InstaStore.shared.plan(planID) {
             return (model.folders.first { $0.id == plan.folderID }?.name ?? "Folder") + " · Instagram"

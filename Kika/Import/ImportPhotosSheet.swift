@@ -678,6 +678,9 @@ private struct ImportOptionsColumn: View {
                 Toggle("Treat JPEG next to RAW as sidecar", isOn: $session.pairSidecars)
                     .padding(.horizontal, 8)
                     .help("RAW+JPEG pairs are copied together, but only the RAW is added to the catalog.")
+                Toggle("Find similar, blurry and cropped shots", isOn: Bindable(CleanupStore.shared).runOnImport)
+                    .padding(.horizontal, 8)
+                    .help("After the import, Clean Up checks the imported photos (Library › Clean Up)")
             }
             .toggleStyle(.checkbox)
             .padding(.vertical, 12)

@@ -162,6 +162,14 @@ struct InstaCheck {
         check(abs(stack[1].maxY - (1920 - g)) < 0.001 && abs(stack[0].height - stack[1].height) < 0.001, "equal cells")
         let feature = InstaLayout.feature3.cellRects(in: size, gap: 0)
         check(feature.count == 3 && abs(feature[0].height - 1280) < 0.001 && abs(feature[2].minX - 540) < 0.001, "1 large + 2 small")
+        let tb = InstaLayout.topBottom3.cellRects(in: size, gap: 0)
+        check(tb == [CGRect(x: 0, y: 0, width: 1080, height: 960), CGRect(x: 0, y: 960, width: 540, height: 960),
+                     CGRect(x: 540, y: 960, width: 540, height: 960)], "1 top + 2 bottom: halves")
+        let g6 = InstaLayout.grid6.cellRects(in: size, gap: 0.01)
+        check(g6.count == 6 && abs(g6[5].maxY - (1920 - 10.8)) < 0.001 && abs(g6[1].minX - (540 + 5.4)) < 0.001
+              && abs(g6[0].height - g6[4].height) < 0.001 && abs(g6[0].width - g6[1].width) < 0.001, "2 × 3 grid")
+        check(InstaLayout.offered == [.single, .grid4, .stack2, .stack3, .topBottom3, .grid6, .side2], "offered: Instagram's layouts in its order")
+        check(InstaLayout.allCases.filter(\.isLegacy) == [.feature3] && InstaLayout(rawValue: "feature3") == .feature3, "old layout still reads")
         check(InstaLayout.allCases.allSatisfy { $0.cellRects(in: size, gap: 0.01).count == $0.cellCount }, "cell counts")
         check(InstaAspect.portrait.pixelSize == CGSize(width: 1080, height: 1350) && InstaAspect.story.pixelSize == CGSize(width: 1080, height: 1920),
               "export sizes")

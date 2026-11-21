@@ -10,6 +10,10 @@
 //  - Radial: CIRadialGradient scaled into an ellipse and rotated; the drawn ellipse is the
 //    outer (0) edge, `feather` moves the full-effect edge inwards; smoothstep.
 //  - Brush: strokes rasterized with CoreGraphics (BrushRasterizer, cached).
+//  - AI: found by Vision on `context.source` (AIMasks.swift, cached).
+//  - Parts (`Mask.parts`), in order: add = max(mask, part), subtract = mask × (1 − part); a brush part is
+//    max(mask × (1 − its eraser strokes), its strokes), so paint and erase apply after everything before it.
+//    Inversion applies to the result.
 //
 //  Mask values are linear (no color management): 0.5 = 50 % blend.
 //
@@ -23,16 +27,59 @@ nonisolated enum MaskRenderer {
     static func maskImage(for mask: Mask, context: RenderContext) -> CIImage? {
         let extent = CGRect(origin: .zero, size: context.imageSize)
         guard extent.width >= 1, extent.height >= 1 else { return nil }
-        let shape: CIImage?
-        switch mask.shape {
-        case .linear(let m): shape = linear(m, context: context)
-        case .radial(let m): shape = radial(m, context: context)
-        case .brush(let m): shape = BrushRasterizer.maskImage(for: m, id: mask.id, context: context)
-        }
+        var shape = shapeImage(mask.shape, id: mask.id, context: context)
+        for part in mask.parts { shape = combine(shape, part, context: context) }
         if mask.inverted {
             return invert(shape ?? black).cropped(to: extent)
         }
         return shape?.cropped(to: extent)
+    }
+
+    /// One shape's mask (nil = covers nothing). `id`: the brush raster cache key.
+    static func shapeImage(_ shape: MaskShape, id: UUID, context: RenderContext) -> CIImage? {
+        switch shape {
+        case .linear(let m): linear(m, context: context)
+        case .radial(let m): radial(m, context: context)
+        case .brush(let m): BrushRasterizer.maskImage(for: m, id: id, context: context)
+        case .ai(let m): AIMaskEngine.maskImage(for: m, context: context)
+        }
+    }
+
+    /// The mask so far with one more part applied.
+    static func combine(_ base: CIImage?, _ part: MaskPart, context: RenderContext) -> CIImage? {
+        if let brush = part.shape.brush {
+            let paint = BrushRasterizer.maskImage(for: brush, id: part.id, context: context)
+            var erased = base
+            if let base, brush.strokes.contains(where: \.isEraser) {
+                // The eraser strokes as paint: what they remove from the parts before.
+                var erasers = BrushMask()
+                erasers.strokes = brush.strokes.filter(\.isEraser).map { var s = $0; s.isEraser = false; return s }
+                if let e = BrushRasterizer.maskImage(for: erasers, id: eraserID(part.id), context: context) {
+                    erased = base.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: invert(e)])
+                }
+            }
+            return maximum(erased, paint)
+        }
+        let image = shapeImage(part.shape, id: part.id, context: context)
+        switch part.mode {
+        case .add: return maximum(base, image)
+        case .subtract:
+            guard let base, let image else { return base }
+            return base.applyingFilter("CIMultiplyCompositing", parameters: [kCIInputBackgroundImageKey: invert(image)])
+        }
+    }
+
+    private static func maximum(_ a: CIImage?, _ b: CIImage?) -> CIImage? {
+        guard let a else { return b }
+        guard let b else { return a }
+        return a.applyingFilter("CIMaximumCompositing", parameters: [kCIInputBackgroundImageKey: b])
+    }
+
+    /// A stable second cache key for a brush part's eraser-only raster.
+    private static func eraserID(_ id: UUID) -> UUID {
+        var u = id.uuid
+        u.0 ^= 0xFF; u.15 ^= 0xFF
+        return UUID(uuid: u)
     }
 
     static func linear(_ m: LinearGradientMask, context: RenderContext) -> CIImage {
@@ -101,24 +148,37 @@ nonisolated enum MaskRenderer {
     /// Red, semi-transparent picture of `mask`'s coverage in DISPLAYED (geometry-applied,
     /// cropped) space, sized like a pipeline render into `targetSize`. For the "O" overlay.
     static func coverageImage(for mask: Mask, geometry: Geometry, fullSize: CGSize, targetSize: CGSize,
-                              opacity: CGFloat = 0.5) -> CGImage? {
+                              source: RenderSource? = nil, opacity: CGFloat = 0.5) -> CGImage? {
+        guard let context = overlayContext(fullSize: fullSize, geometry: geometry, targetSize: targetSize, source: source) else { return nil }
+        let m = maskImage(for: mask, context: context) ?? black.cropped(to: CGRect(origin: .zero, size: context.imageSize))
+        return displayedTint(m, geometry: geometry, context: context, color: (1, 0, 0), opacity: opacity)
+    }
+
+    /// The render context of an overlay sized like a pipeline render into `targetSize` (nil = nothing to draw).
+    static func overlayContext(fullSize: CGSize, geometry: Geometry, targetSize: CGSize, source: RenderSource?) -> RenderContext? {
         guard fullSize.width > 0, fullSize.height > 0, targetSize.width > 0, targetSize.height > 0 else { return nil }
-        var settings = EditSettings()
-        settings.geometry = geometry
         let out = GeometryMath(sourceSize: fullSize, geometry: geometry).croppedSize
         guard out.width > 0, out.height > 0 else { return nil }
         let scale = min(1, targetSize.width / out.width, targetSize.height / out.height)
         let imageSize = CGSize(width: (fullSize.width * scale).rounded(.down), height: (fullSize.height * scale).rounded(.down))
-        let context = RenderContext(fullSize: fullSize, imageSize: imageSize, draft: true, applyCrop: true)
-        let m = maskImage(for: mask, context: context) ?? black.cropped(to: CGRect(origin: .zero, size: imageSize))
+        guard imageSize.width >= 1, imageSize.height >= 1 else { return nil }
+        return RenderContext(fullSize: fullSize, imageSize: imageSize, draft: true, applyCrop: true, source: source)
+    }
+
+    /// A mask image (mask space at `context.imageSize`) in DISPLAYED (geometry-applied, cropped) space, as
+    /// `color` (unpremultiplied RGB) at `opacity` × mask.
+    static func displayedTint(_ m: CIImage, geometry: Geometry, context: RenderContext,
+                              color: (CGFloat, CGFloat, CGFloat), opacity: CGFloat) -> CGImage? {
+        var settings = EditSettings()
+        settings.geometry = geometry
         let displayed = GeometryStage.apply(m, settings: settings, context: context)
-        // Unpremultiplied (1, 0, 0, opacity × mask): CIColorMatrix works on unpremultiplied values.
+        // Unpremultiplied (r, g, b, opacity × mask): CIColorMatrix works on unpremultiplied values.
         let tinted = displayed.applyingFilter("CIColorMatrix", parameters: [
             "inputRVector": CIVector(x: 0, y: 0, z: 0, w: 0),
             "inputGVector": CIVector(x: 0, y: 0, z: 0, w: 0),
             "inputBVector": CIVector(x: 0, y: 0, z: 0, w: 0),
             "inputAVector": CIVector(x: opacity, y: 0, z: 0, w: 0),
-            "inputBiasVector": CIVector(x: 1, y: 0, z: 0, w: 0),
+            "inputBiasVector": CIVector(x: color.0, y: color.1, z: color.2, w: 0),
         ])
         let extent = displayed.extent.integral
         guard !extent.isInfinite, extent.width > 0, extent.height > 0 else { return nil }

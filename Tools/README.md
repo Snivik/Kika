@@ -70,7 +70,7 @@ Snapshots must also be written inside the container. View them with the Read too
   integer defaults need plist syntax: `-previews.thumbnailSize '<integer>256</integer>'`.
   More (see each file's header): `adjust <key> <v>` / `before on|off` / `window w h` / `scroll f`
   (`Develop/Adjustments/UI/DevelopDevScript.swift`), `mask linear|radial [cx cy]|brush`, `maskoverlay`,
-  `maskcreate` (`Develop/Masking/UI/MaskDevScript.swift`), `lightroom preview|import <lrcat>` /
+  `maskcreate`, `maskai`, `maskaistatus`, `maskpart add|subtract <kind>` (`Develop/Masking/UI/MaskDevScript.swift`), `lightroom preview|import <lrcat>` /
   `lightroom snapshot <png>` (`LightroomImport/LightroomImportDev.swift`), `import…`
   (`Import/ImportDevCommands.swift`: `importsheet`, `importsource <dir>`, `importdest <dir>`, `importwait`,
   `importdump`, `importrun`, `importconflict rename|replace|skip`, `importdetect on|off`, `importpattern …`,
@@ -96,6 +96,9 @@ Snapshots must also be written inside the container. View them with the Read too
   `zoomstats` (events, handler / frame ms avg + max, sharp render after the end), `sidebar` (folder sidebar
   per mode), `rawkey <keyCode> <chars> <ignoringMods> [cmd shift opt ctrl]` (explicit characters, e.g. a
   German ⌘= `rawkey 29 = = cmd shift`). `zoomdump` also prints the controller's window.
+  Clean Up (`Cleanup/UI/CleanupDevScript.swift`): `cleanup run all|last|<folder> [similar,blurry,cropped] [low|medium|high]`
+  (waits for the run), `cleanup sheet [folder]`, `cleanup show [similar|blurry|cropped|kept]`, `cleanup keep|reject|again
+  <check> <file…>`, `cleanup resolve <group #> <file to keep…>`, `cleanup onimport on|off`, `cleanup dump`.
   Tags (`Tags/UI/TagsDevScript.swift`): `tag new <name> [v1,v2] [folders]`, `tag set <name> <value|none> [author]` (action targets;
   e.g. author `workflow:blur-check`), `tag folder <name> <value> <folder>`, `tag sidebar|filter <name> <value|review>`,
   `tag confirm`, `tag edit <name>|editnew|close`, `tag dump`.
@@ -196,7 +199,7 @@ Build from the repo root (engine default set + the extra files listed), run, exp
 | `folders_check` | `Kika/App/FolderTree.swift Kika/Library/Sidebar/{Catalog+FolderManagement,FolderDragPayload}.swift` | `[out-dir]` (folder tree, moves, cycles, …; Dates: capture month counts, year / month / undated sources) |
 | `previews_check` | – | `[photo-dir] [out-dir]` |
 | `develop_check` | – | `[dng] [out-dir] [only-name-substring]` |
-| `masks_check` | `Kika/Develop/DevelopSession.swift Kika/Develop/Masking/UI/{MaskInteraction,MaskToolState,DevelopSession+Masks}.swift Kika/Develop/Crop/{DevelopSession+Crop,CropMath,Catalog+CropPresets}.swift` | `[dng] [out-dir]` |
+| `masks_check` | `Kika/Develop/DevelopSession.swift Kika/Develop/Masking/UI/{MaskInteraction,MaskToolState,DevelopSession+Masks}.swift Kika/Develop/Crop/{DevelopSession+Crop,CropMath,Catalog+CropPresets}.swift` | `[dng] [out-dir]` (… plus parts: brush erase / paint on a gradient mask, Subtract ▸ Radial with its own handles, JSON round trip, Pick Object's keep-picking and ⌥-click remove flow) |
 | `crop_check` | `Kika/Develop/Crop/CropMath.swift Kika/Develop/Crop/Catalog+CropPresets.swift` | `[photo-dir] [out-dir]` |
 | `zoom_check` | `Kika/Develop/Zoom/RegionRenderer.swift` | `[dng]` (viewport math incl. free pinch levels, steps from them, pinch anchor held over 20 steps; region render == full render, 1:1 timings) |
 | `catalog_transfer_check` | `Kika/CatalogTransfer/CatalogTransfer.swift Kika/LightroomImport/RootAccess.swift` | `[catalog-dir to COPY] [out-dir]` (default: the realistic catalog copy `…/Data/tmp/catalog/pristine`, `/private/tmp/claude-501/catalog-out/run`) |
@@ -207,6 +210,9 @@ Build from the repo root (engine default set + the extra files listed), run, exp
 | `vcopies_check` | `Kika/VirtualCopies/{Catalog+VirtualCopies,VirtualCopyPreviews}.swift Kika/Import/Catalog+Import.swift Kika/LightroomImport/{RootAccess,LightroomCatalogReader,LightroomImportPlan,Catalog+LightroomImport}.swift Kika/Export/ExportEngine.swift Kika/Develop/Crop/CropMath.swift` | `[realistic catalog dir to COPY] [sample.jpg] [out-dir]` (defaults: `…/Data/tmp/vcopies/pristine`, `…/Data/tmp/folders/photos/L1090230.JPG`; schema v2 migration of a fresh v1 + the realistic copy, copies, sorting, import dedupe, relink, removal, preview seeding, export names) |
 | `decode_check` | `Kika/Actions/EditSections.swift` | `[raw] [out-dir]` (default `/Volumes/T9/Lightroom/2026/2026-10-11/P1033881.RW2`, the sunset portrait; decode JSON, seeded profiles, layering + provenance, edit_version invalidation per camera / global / chosen profile, delete clears references, import / export, Recent renders hash; renders: old vs new clip fade on the face, boost 0, knob reset on the shared filter, decoder pin + fallback, camera default; make-less (Lightroom) cameras: identity, gaps, fallback default, fill + default move; Match Camera JPEG sampling (spread, extremes left out, determinism) and on the RAW + 3 neighbours: never worse, bounds, exposure checks, monochrome-style outlier, cancel) |
 | `tags_check` | `Kika/App/FolderTree.swift` | `[out-dir]` (tag definitions, per-author values, effective value / to-review filters incl. folders + subfolders, confirm suggestions, value-list edits, folder tags, sidebar folder filter (matches + ancestors, effective values, To Review, name), cascades; no photos needed, runs in CI) |
+| `cleanup_check` | `Kika/Cleanup/*.swift Kika/VirtualCopies/Catalog+VirtualCopies.swift` | `[out-dir]` (Clean Up: grouping (bursts, gap allowance, pan guard, keeper ranking), crop scores, sharpness on drawn sharp / defocused / shaken photos, a whole run on a temp catalog: verdicts as workflow tags, groups, kept by you surviving re-runs, picked never flagged, analysis cache + edits, cascades, cancel; draws its own photos, runs in CI) |
+| `cleanup_tune` | `Kika/Cleanup/CleanupModels.swift Kika/Cleanup/CleanupAnalyzer.swift` | `<out-dir> <folder>…` (local tuning on real photos, read-only: contact sheet `index.html` sorted by sharpness with crop reasons and similar groups, `scores.csv`; `CLEANUP_SYNTH=1` also measures each photo blurred 1 / 2 / 3 px and shaken) |
+| `aimasks_check` | – | `[out-dir]` (AI mask JSON round trip, unknown mask kinds skipped, kinds ↔ targets; sky finder through the whole engine on a drawn sky-over-ground photo: coverage, rows, cache, mask image at render size, no source = no mask; background = inverse of subject; Expand ±50 grows / shrinks a square by the expected pixels, Feather softens its edge and keeps its area; every object found on the photo, cached; label lookup) |
 | `actions_check` | `Kika/Actions/{PhotoActionSpec,EditSections,BulkCrop,Catalog+BulkEdits}.swift Kika/Shortcuts/ShortcutModel.swift Kika/Develop/Crop/{CropMath,Catalog+CropPresets}.swift` | `[out-dir]` (registry arity / modes / enablement / shortcut titles + no default-key conflicts, target resolution, Bulk Crop math for every preset × orientation × portrait / landscape / square / rotated / straightened / flipped / EXIF-rotated photo, Paste / Sync section masking, bulk apply + one-step undo / redo on a temp catalog, 2,000-photo timing) |
 
 ## lrmatch_check.swift (Develop sliders vs Lightroom)

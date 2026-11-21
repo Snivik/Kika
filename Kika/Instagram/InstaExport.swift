@@ -7,13 +7,16 @@
 //    - a single-photo slide → one image at the post's export size (`InstaAspect.pixelSize`, 1080 wide);
 //    - a layout → one image per filled cell, in the cell's shape (its rect at export size, `cellRects`), 1080 wide;
 //    - a split (span n) → the photo framed in its n-slide-wide cell, cut into n strips at the post's export size.
+//  The exception is a layout Instagram no longer offers (`InstaLayout.isLegacy`): its cells can't be rebuilt there,
+//  so the whole frame (photos, gaps and background, as on the board) is one image at the post's export size.
 //  Each photo is framed in its cell exactly as on the board (InstaFraming), rendered with its Develop edits
 //  (RenderPipeline, at the resolution the framing needs), 8-bit sRGB, metadata kept (ExportMetadata). Where a photo
 //  scaled below Fill leaves part of its cell uncovered, the slide's background shows, as on the board; the gaps and
 //  margins around cells are never exported.
 //
 //  Files sort in posting order: "01.jpg", "02.jpg", …, numbered by the slide's position on the board; the parts of a
-//  layout or split are "03-1.jpg", "03-2.jpg", … (a layout's by cell number, a split's left to right).
+//  layout or split are "03-1.jpg", "03-2.jpg", … (a layout's by cell number, a split's left to right); a whole legacy
+//  frame is "03.jpg".
 //    - slide: straight into the chosen folder, prefixed with the post's title ("Post 1 03-2.jpg");
 //    - post / story set: a folder named after it ("Post 1/"); a post also gets post.txt (caption + planned date, status);
 //    - plan: one such folder per post / story set, numbered in board order ("01 Post 1/", "02 Stories 1/").
@@ -36,17 +39,45 @@ nonisolated enum InstaExportScope: Hashable, Sendable {
     case plan(Int64)
 }
 
-/// One render: a photo framed in a cell, written as one file, or cut into strips (a split).
+/// One render: a photo framed in a cell, written as one file, or cut into strips (a split); or a whole legacy frame.
 nonisolated struct InstaExportImage: Hashable, Sendable {
-    var photoID: Int64
-    var transform: InstaTransform
-    /// Pixels of the framed cell (a split: all its strips side by side).
+    /// A photo and where it sits: `rect` in pixels of `renderSize` (y down).
+    struct Part: Hashable, Sendable {
+        var photoID: Int64
+        var transform: InstaTransform
+        var rect: CGRect
+    }
+
+    /// One part filling the image, or (a whole frame) one per filled cell.
+    var parts: [Part]
+    /// Pixels of the image (a split: all its strips side by side).
     var renderSize: CGSize
     /// "#RRGGBB", where the photo doesn't cover its cell.
     var background: String
     /// File names without extension, one per strip (left to right).
     var fileNames: [String]
 
+    /// A frame in a legacy layout, exported as one picture.
+    var isWholeFrame = false
+
+    /// One photo filling the image.
+    init(photoID: Int64, transform: InstaTransform, renderSize: CGSize, background: String, fileNames: [String]) {
+        parts = [Part(photoID: photoID, transform: transform, rect: CGRect(origin: .zero, size: renderSize))]
+        self.renderSize = renderSize
+        self.background = background
+        self.fileNames = fileNames
+    }
+
+    /// A whole frame: each part in its cell.
+    init(frame parts: [Part], renderSize: CGSize, background: String, fileName: String) {
+        self.parts = parts
+        self.renderSize = renderSize
+        self.background = background
+        fileNames = [fileName]
+        isWholeFrame = true
+    }
+
+    var photoIDs: [Int64] { parts.map(\.photoID) }
     var strips: Int { fileNames.count }
     /// Pixels of each written file.
     var fileSize: CGSize { CGSize(width: renderSize.width / CGFloat(max(strips, 1)), height: renderSize.height) }
@@ -60,6 +91,8 @@ nonisolated struct InstaExportFolder: Hashable, Sendable {
     var images: [InstaExportImage]
 
     var fileCount: Int { images.reduce(0) { $0 + $1.strips } + (postText == nil ? 0 : 1) }
+    /// Legacy frames written as one picture.
+    var wholeFrameCount: Int { images.filter(\.isWholeFrame).count }
 }
 
 // MARK: - Layout (what gets written where)
@@ -81,6 +114,13 @@ nonisolated enum InstaExportLayout {
                                      background: slide.background, fileNames: names)]
         }
         let rects = slide.layout.cellRects(in: frame, gap: slide.gap)
+        if slide.layout.isLegacy {
+            let parts = slide.cells.sorted { $0.index < $1.index }.compactMap { cell in
+                rects.indices.contains(cell.index)
+                    ? InstaExportImage.Part(photoID: cell.photoID, transform: cell.transform, rect: rects[cell.index]) : nil
+            }
+            return parts.isEmpty ? [] : [InstaExportImage(frame: parts, renderSize: frame, background: slide.background, fileName: base)]
+        }
         return slide.cells.sorted { $0.index < $1.index }.compactMap { cell in
             guard rects.indices.contains(cell.index) else { return nil }
             return InstaExportImage(photoID: cell.photoID, transform: cell.transform, renderSize: cellSize(rects[cell.index].size),
@@ -172,6 +212,20 @@ nonisolated enum InstaExportRenderer {
     /// The developed photo (`image`, any resolution; `imageSize` = its aspect as the board places it) framed in a
     /// cell of `size` pixels by `transform`, on `background`. 8-bit sRGB.
     static func frame(_ image: CGImage, imageSize: CGSize, in size: CGSize, transform: InstaTransform, background: String) -> CGImage? {
+        compose([Framed(image: image, imageSize: imageSize, rect: CGRect(origin: .zero, size: size), transform: transform)],
+                size: size, background: background)
+    }
+
+    /// A developed photo and the cell (y down, pixels of the image) it is framed in.
+    struct Framed {
+        var image: CGImage
+        var imageSize: CGSize
+        var rect: CGRect
+        var transform: InstaTransform
+    }
+
+    /// Every photo framed in its cell, clipped to it, on `background` (which also shows between cells). 8-bit sRGB.
+    static func compose(_ photos: [Framed], size: CGSize, background: String) -> CGImage? {
         let w = Int(size.width.rounded()), h = Int(size.height.rounded())
         guard w > 0, h > 0,
               let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0, space: RenderPipeline.sRGB,
@@ -179,11 +233,16 @@ nonisolated enum InstaExportRenderer {
         ctx.interpolationQuality = .high
         ctx.setFillColor(color(background))
         ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
-        let p = InstaFraming.placement(imageSize: imageSize, cellSize: CGSize(width: w, height: h), transform: transform)
-        // Placement is y-down; the context is y-up (so clockwise is a negative angle).
-        ctx.translateBy(x: p.center.x, y: CGFloat(h) - p.center.y)
-        ctx.rotate(by: -p.radians)
-        ctx.draw(image, in: CGRect(x: -p.size.width / 2, y: -p.size.height / 2, width: p.size.width, height: p.size.height))
+        for f in photos {
+            let p = InstaFraming.placement(imageSize: f.imageSize, cellSize: f.rect.size, transform: f.transform)
+            ctx.saveGState()
+            // Placement and cells are y-down; the context is y-up (so clockwise is a negative angle).
+            ctx.clip(to: CGRect(x: f.rect.minX, y: CGFloat(h) - f.rect.maxY, width: f.rect.width, height: f.rect.height))
+            ctx.translateBy(x: f.rect.minX + p.center.x, y: CGFloat(h) - (f.rect.minY + p.center.y))
+            ctx.rotate(by: -p.radians)
+            ctx.draw(f.image, in: CGRect(x: -p.size.width / 2, y: -p.size.height / 2, width: p.size.width, height: p.size.height))
+            ctx.restoreGState()
+        }
         return ctx.makeImage()
     }
 
@@ -278,6 +337,8 @@ nonisolated final class InstaExportJob: @unchecked Sendable {
     var isCancelled: Bool { lock.lock(); defer { lock.unlock() }; return cancelled }
 
     var fileCount: Int { folders.reduce(0) { $0 + $1.fileCount } }
+    /// Legacy frames written as one picture.
+    var wholeFrameCount: Int { folders.reduce(0) { $0 + $1.wholeFrameCount } }
 
     func run(progress: @escaping @Sendable (InstaExportProgress) -> Void = { _ in }) -> InstaExportResult {
         let start = Date()
@@ -290,7 +351,7 @@ nonisolated final class InstaExportJob: @unchecked Sendable {
         }
         let photos: [Int64: Photo]
         do {
-            let ids = Array(Set(folders.flatMap { $0.images.map(\.photoID) }))
+            let ids = Array(Set(folders.flatMap { $0.images.flatMap(\.photoIDs) }))
             photos = Dictionary(try catalog.photos(ids: ids).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         } catch {
             result.stopError = .io("Can't read the catalog (\(error))", EIO)
@@ -321,11 +382,12 @@ nonisolated final class InstaExportJob: @unchecked Sendable {
             }
             for image in folder.images {
                 if isCancelled { break folderLoop }
-                let photo = photos[image.photoID]
-                switch autoreleasepool(invoking: { render(image, photo: photo) }) {
-                case .skipped(let reason):
+                // A whole frame takes its metadata from its first photo.
+                let photo = image.photoIDs.first.flatMap { photos[$0] }
+                switch autoreleasepool(invoking: { render(image, photos: photos) }) {
+                case .skipped(let reason, let skipped):
                     for name in image.fileNames {
-                        result.skipped.append(InstaExportSkip(fileName: name + ".jpg", photoName: photo?.displayTitle ?? "photo", reason: reason))
+                        result.skipped.append(InstaExportSkip(fileName: name + ".jpg", photoName: skipped?.displayTitle ?? "photo", reason: reason))
                     }
                 case .strips(let strips):
                     if isCancelled { break folderLoop }
@@ -358,25 +420,31 @@ nonisolated final class InstaExportJob: @unchecked Sendable {
 
     private enum Rendered {
         case strips([CGImage])
-        case skipped(ExportSkipReason)
+        /// The photo that couldn't be rendered (a whole frame is skipped if any of its photos is).
+        case skipped(ExportSkipReason, Photo?)
     }
 
-    /// The photo with its edits, framed in its cell and cut into the image's strips.
-    private func render(_ image: InstaExportImage, photo: Photo?) -> Rendered {
-        guard let photo else { return .skipped(.failed("photo not in the catalog")) }
-        let url = SecurityScopeManager.shared.accessibleURL(for: photo, catalog: catalog)
-        guard FileManager.default.isReadableFile(atPath: url.path) else { return .skipped(.offline) }
-        guard let source = RenderPipeline.makeSource(url: url) else { return .skipped(.unreadable) }
-        let settings = photo.editSettings
-        let cropped = GeometryMath(sourceSize: source.orientedSize, geometry: settings.geometry).croppedSize
-        // Render at the size the photo is drawn at (capped at full resolution by the pipeline).
-        let drawn = InstaFraming.placement(imageSize: cropped, cellSize: image.renderSize, transform: image.transform).size
-        let target = CGSize(width: max(1, drawn.width.rounded(.up)), height: max(1, drawn.height.rounded(.up)))
-        guard let developed = RenderPipeline.renderCGImage(source: source, settings: settings, targetSize: target,
-                                                           colorSpace: RenderPipeline.sRGB) else { return .skipped(.failed("render failed")) }
-        guard let framed = InstaExportRenderer.frame(developed, imageSize: cropped, in: image.renderSize, transform: image.transform,
-                                                     background: image.background) else { return .skipped(.failed("framing failed")) }
-        return .strips(InstaExportRenderer.strips(framed, count: image.strips))
+    /// The photos with their edits, framed in their cells and cut into the image's strips.
+    private func render(_ image: InstaExportImage, photos: [Int64: Photo]) -> Rendered {
+        var framed: [InstaExportRenderer.Framed] = []
+        for part in image.parts {
+            guard let photo = photos[part.photoID] else { return .skipped(.failed("photo not in the catalog"), nil) }
+            let url = SecurityScopeManager.shared.accessibleURL(for: photo, catalog: catalog)
+            guard FileManager.default.isReadableFile(atPath: url.path) else { return .skipped(.offline, photo) }
+            guard let source = RenderPipeline.makeSource(url: url) else { return .skipped(.unreadable, photo) }
+            let settings = photo.editSettings
+            let cropped = GeometryMath(sourceSize: source.orientedSize, geometry: settings.geometry).croppedSize
+            // Render at the size the photo is drawn at (capped at full resolution by the pipeline).
+            let drawn = InstaFraming.placement(imageSize: cropped, cellSize: part.rect.size, transform: part.transform).size
+            let target = CGSize(width: max(1, drawn.width.rounded(.up)), height: max(1, drawn.height.rounded(.up)))
+            guard let developed = RenderPipeline.renderCGImage(source: source, settings: settings, targetSize: target,
+                                                               colorSpace: RenderPipeline.sRGB) else { return .skipped(.failed("render failed"), photo) }
+            framed.append(.init(image: developed, imageSize: cropped, rect: part.rect, transform: part.transform))
+        }
+        guard let composed = InstaExportRenderer.compose(framed, size: image.renderSize, background: image.background) else {
+            return .skipped(.failed("framing failed"), image.photoIDs.first.flatMap { photos[$0] })
+        }
+        return .strips(InstaExportRenderer.strips(composed, count: image.strips))
     }
 
     private func encode(_ image: CGImage, source: URL?, sidecar: URL?) throws -> Data {

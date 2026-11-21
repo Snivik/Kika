@@ -133,6 +133,9 @@ struct InstaExportCheck {
         let f2 = try catalog.addInstaSlide(postID: stories, layout: .grid4)
         try catalog.setInstaCells(slideID: f2, from: 0, photoIDs: [wide])
         try catalog.setInstaCells(slideID: f2, from: 2, photoIDs: [tall])
+        // An old layout (1 large + 2 small, no longer in Instagram) with cells 1 and 2 filled: one picture.
+        let f3 = try catalog.addInstaSlide(postID: stories, layout: .feature3)
+        try catalog.setInstaCells(slideID: f3, from: 0, photoIDs: [wide, tall])
         // Post 2: an offline photo and no caption.
         try catalog.addInstaSlides(postID: post2, photoIDs: [missing])
 
@@ -143,13 +146,17 @@ struct InstaExportCheck {
         let planFolders = InstaExportLayout.folders(for: .plan(plan), posts: posts, locale: gb, timeZone: utc)
         check(planFolders.map { $0.name ?? "-" } == ["01 Post 1", "02 Stories 1", "03 Post 2"], "plan: a numbered folder per post / story set, empty Post 3 left out")
         check(planFolders[0].images.flatMap(\.fileNames) == ["01", "02", "03-1", "03-2", "03-3", "04", "05"], "post: board numbers, split strips 03-1…03-3")
-        check(planFolders[1].images.flatMap(\.fileNames) == ["01-1", "01-2", "01-3", "02-1", "02-3"], "stories: layout cells by cell number, empty cells skipped")
+        check(planFolders[1].images.flatMap(\.fileNames) == ["01-1", "01-2", "01-3", "02-1", "02-3", "03"],
+              "stories: layout cells by cell number, empty cells skipped; an old layout whole")
+        check(planFolders[1].images.map(\.isWholeFrame) == [false, false, false, false, false, true] && planFolders[1].wholeFrameCount == 1
+              && planFolders[1].images[5].photoIDs == [wide, tall], "old layout: one image with both photos")
         check(planFolders[0].postText != nil && planFolders[1].postText == nil, "post.txt for posts only")
         let slideFolders = InstaExportLayout.folders(for: .slide(s[2]), posts: posts)
         check(slideFolders.count == 1 && slideFolders[0].name == nil && slideFolders[0].images[0].fileNames == ["Post 1 03-1", "Post 1 03-2", "Post 1 03-3"],
               "slide: straight into the folder, titled")
         let story = AspectSizes(planFolders[1].images.map(\.fileSize))
-        check(story.list == ["1080×635", "1080×643", "1080×635", "1080×1960", "1080×1960"], "story cells keep their shape at 1080 wide: \(story.list)")
+        check(story.list == ["1080×635", "1080×643", "1080×635", "1080×1960", "1080×1960", "1080×1920"],
+              "story cells keep their shape at 1080 wide, an old layout's frame is 9:16: \(story.list)")
         check(InstaExportLayout.fileSafe("a/b: c\nd", fallback: "x") == "a-b- c d" && InstaExportLayout.fileSafe(" ..", fallback: "Post") == "Post",
               "titles made file-safe")
 
@@ -173,17 +180,18 @@ struct InstaExportCheck {
         check(listing(out) == ["01 Post 1", "02 Stories 1", "03 Post 2"], "subfolders in board order: \(listing(out))")
         let postDir = out.appendingPathComponent("01 Post 1"), storyDir = out.appendingPathComponent("02 Stories 1")
         check(listing(postDir) == ["01.jpg", "02.jpg", "03-1.jpg", "03-2.jpg", "03-3.jpg", "04.jpg", "05.jpg", "post.txt"], "post files: \(listing(postDir))")
-        check(listing(storyDir) == ["01-1.jpg", "01-2.jpg", "01-3.jpg", "02-1.jpg", "02-3.jpg"], "story files, no post.txt: \(listing(storyDir))")
+        check(listing(storyDir) == ["01-1.jpg", "01-2.jpg", "01-3.jpg", "02-1.jpg", "02-3.jpg", "03.jpg"], "story files, no post.txt: \(listing(storyDir))")
         check(listing(out.appendingPathComponent("03 Post 2")) == ["post.txt"], "offline photo's post: post.txt only")
         check(result.skipped.map(\.fileName) == ["01.jpg"] && result.skipped.first?.reason == .offline, "offline photo skipped")
         check((try? String(contentsOf: postDir.appendingPathComponent("post.txt"), encoding: .utf8)) == text, "post.txt written")
-        check(result.imageCount == 12 && result.stopError == nil && !result.wasCancelled, "12 images: \(result.summary)")
+        check(result.imageCount == 13 && result.stopError == nil && !result.wasCancelled, "13 images: \(result.summary)")
+        check(job.wholeFrameCount == 1, "job counts the old-layout frame")
         check(progress.last?.done == job.fileCount && progress.last?.total == job.fileCount, "progress reaches every file (\(job.fileCount))")
 
         print("Sizes")
         let postSizes = AspectSizes(["01", "02", "03-1", "03-2", "03-3", "04", "05"].map { size(postDir.appendingPathComponent("\($0).jpg")) })
         check(Set(postSizes.list) == ["1080×1350"], "every post image 1080×1350 (4:5): \(postSizes.list)")
-        let storySizes = AspectSizes(["01-1", "01-2", "01-3", "02-1", "02-3"].map { size(storyDir.appendingPathComponent("\($0).jpg")) })
+        let storySizes = AspectSizes(["01-1", "01-2", "01-3", "02-1", "02-3", "03"].map { size(storyDir.appendingPathComponent("\($0).jpg")) })
         check(storySizes.list == story.list, "story images as laid out: \(storySizes.list)")
 
         print("Framing (photo 1600×1200: red | green over blue | yellow)")
@@ -207,6 +215,12 @@ struct InstaExportCheck {
         check(hues(storyDir.appendingPathComponent("01-2.jpg"), [(480, 280), (600, 280), (480, 360), (600, 360)]) == [.red, .green, .blue, .yellow],
               "tall photo in a wide cell: centred")
         check(hues(storyDir.appendingPathComponent("01-1.jpg"), [(2, 2), (1077, 632)]) == [.red, .yellow], "no gap or background around a cell")
+        // Old layout, whole frame on white: the wide photo fills the top two thirds (centre at 540, 644), the tall one the
+        // bottom left cell (centre at 274, 1596), the empty bottom right cell and the margins show the background.
+        check(hues(storyDir.appendingPathComponent("03.jpg"), [(480, 600), (600, 600), (480, 700), (600, 700)]) == [.red, .green, .blue, .yellow]
+              && hues(storyDir.appendingPathComponent("03.jpg"), [(230, 1550), (320, 1650)]) == [.red, .yellow]
+              && hues(storyDir.appendingPathComponent("03.jpg"), [(5, 5), (800, 1600), (540, 1284)]) == [.white, .white, .white],
+              "old layout: photos in their cells, background in the gaps and the empty cell")
 
         print("Post and slide export")
         let again = try InstaExportJob(catalog: catalog, scope: .post(post1), destination: out).run()

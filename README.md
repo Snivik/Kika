@@ -41,14 +41,16 @@ Edit with the controls you already know:
 - a colour mixer (hue, saturation and luminance per colour);
 - vignetting and grain;
 - crop and straighten;
-- linear, radial and brush masks.
+- linear, radial and brush masks, and masks found on the photo on your Mac: Subject, Background, People, Sky (beta)
+  and Pick Object (click a subject); add or subtract any of them from a mask, and clean any mask up with the brush.
 
  The sliders are calibrated against Lightroom's on the same files, so they move the way you expect.
 
 - **Non-destructive:** edits live in the catalog; your original files are never touched.
 - **Fast to work with:**
   - zoom and pan with pinch, smart magnify or the keyboard;
-  - a full-screen preview, and Tab to hide the panels;
+  - Space for a quick look at a photo in the Library, as in Finder, a full-screen preview, and Tab to hide the panels;
+  - file info (camera, lens, exposure, size, folder) in Library's Info panel (⌘I) and in Develop;
   - recently edited photos open instantly, and the next ones are prepared ahead of time.
 - **Edit many photos at once:** copy, paste and sync settings across any number of photos, undone in one step.
   Virtual copies let you try a different look on the same file.
@@ -84,6 +86,10 @@ settings most apps hide:
     then review a small set instead of everything.
 - **One filter:** flags, ratings and tags share the same menu, and active filters show as chips. The folder list
   has its own filter by name and tag.
+- **Clean Up:** finds photos you can probably remove, on your Mac with Apple's Vision: similar shots taken one
+  after another (stacked like on a phone, the best one marked), blurry subjects, and faces or heads cut by the
+  frame. Run it on everything, the last import or some folders, or on every import. Keep a photo and it's never
+  suggested again for that reason; Reject flags it. Nothing is ever deleted.
 - **Sidebar:** every section can be hidden.
 
 ### Instagram Planner
@@ -97,7 +103,8 @@ the folder's photos sit next to your posts and stories, and you drag them in.
   shows the photos you haven't used yet.
 - **Posts:** carousels of up to 20 slides in 4:5, 3:4 or 1:1, each with a caption, a planned date and a status
   (draft, ready, posted).
-- **Stories:** frames with one photo or a layout of 2–4 photos.
+- **Stories:** frames with one photo or one of Instagram's story layouts (2–6 photos), so each photo exports on its
+  own and goes back into the same spot in Instagram's Layout.
 - **Splits:** cut one photo across 2–5 carousel slides, so it scrolls as one panorama.
 
 <p align="center"><img src="docs/screenshots/instagram-adjust.png" alt="Adjust Split: a panorama with its frame and cut line" width="620"></p>

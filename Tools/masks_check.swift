@@ -310,7 +310,81 @@ struct MasksCheck {
         check(session.settings.masks.count == 4 && session.selectedMask?.radial != nil, "click creates a default radial")
         session.finishMasking()
         check(session.activeTool == .none, "Done leaves the mask tool")
+
+        partChecks(session: session, space: space, drag: drag, vp: vp, outDir: outDir)
         session.close()
+    }
+
+    /// Parts: brush clean-up on a gradient, Subtract Radial (its own handles), Pick Object's add / ⌥ remove flow.
+    static func partChecks(session: DevelopSession, space: MaskSpace, drag: (CGPoint, CGPoint, Int, Bool) -> Void,
+                           vp: (Double, Double) -> CGPoint, outDir: URL) {
+        let tool = MaskToolState.shared
+        tool.eraseMode = false
+        let ctx = RenderContext(fullSize: session.orientedSize, imageSize: CGSize(width: 800, height: 800 * session.orientedSize.height / session.orientedSize.width),
+                                draft: true, applyCrop: true)
+        func gray(_ id: UUID) -> CGImage? { session.mask(id: id).flatMap { MaskRenderer.grayscaleImage(for: $0, context: ctx) } }
+
+        // A full-photo linear (start below the photo: 1 everywhere above y = 1).
+        session.beginCreatingMask(.linear)
+        drag(vp(0.5, 1.4), vp(0.5, 1.6), 12, false)
+        guard let id = session.selectedMaskID else { check(false, "parts: base mask"); return }
+        check(gray(id).map { sample($0, x: 0.5, y: 0.5) > 0.97 } == true, "parts: base mask covers the photo")
+
+        // Brush on a non-brush mask: erase cleans it up, paint adds back (one brush part, order kept).
+        session.beginAddingPart(.brush, mode: .add, to: id)
+        check(tool.refining && session.isBrushing && session.selectedMaskID == id, "parts: Brush on a gradient mask paints")
+        tool.brushSize = 16; tool.brushFeather = 0; tool.brushFlow = 100
+        drag(vp(0.2, 0.5), vp(0.8, 0.5), 200, true)
+        drag(vp(0.5, 0.45), vp(0.5, 0.55), 50, false)
+        let m = session.mask(id: id)
+        check(m?.parts.count == 1 && m?.parts.first?.shape.brush?.strokes.count == 2 && m?.linear != nil,
+              "parts: erase + paint go into one brush part; the gradient stays")
+        if let g = gray(id) {
+            writePNG(g, to: outDir.appendingPathComponent("mask_parts_brush.png"))
+            check(sample(g, x: 0.3, y: 0.5) < 0.03 && sample(g, x: 0.5, y: 0.5) > 0.97 && sample(g, x: 0.3, y: 0.2) > 0.97,
+                  "parts: erased stripe 0, painted back 1, rest untouched (\(fmt(sample(g, x: 0.3, y: 0.5))), \(fmt(sample(g, x: 0.5, y: 0.5))))")
+        }
+        tool.refining = false
+
+        // Subtract Radial: drag creates a selected subtract part; its handles edit the part, not the gradient.
+        session.beginAddingPart(.radial, mode: .subtract, to: id)
+        check(tool.pendingKind == .radial && tool.addingTo == id, "parts: Subtract ▸ Radial waits for a drag")
+        drag(vp(0.5, 0.25), vp(0.6, 0.35), 12, false)
+        let part = session.mask(id: id)?.parts.last
+        check(session.settings.masks.count == 5 && part?.mode == .subtract && part?.shape.radial != nil
+              && session.selectedPartID == part?.id && tool.pendingKind == nil, "parts: the radial is a selected subtract part")
+        let before = session.mask(id: id)?.linear
+        drag(vp(0.6, 0.25), vp(0.7, 0.25), 12, false)   // X handle
+        check(abs((session.mask(id: id)?.parts.last?.shape.radial?.radiusX ?? 0) - 0.2) < 0.004 && session.mask(id: id)?.linear == before,
+              "parts: the part's X handle resizes it, the gradient stays")
+        if let g = gray(id) {
+            check(sample(g, x: 0.5, y: 0.25) < 0.03 && sample(g, x: 0.9, y: 0.8) > 0.97, "parts: the radial is cut out of the mask")
+        }
+        let json = session.settings.jsonString() ?? ""
+        check(EditSettings.fromJSON(json)?.masks == session.settings.masks, "parts: JSON round trip")
+        session.selectPart(MaskRef(mask: id))
+        check(session.selectedPartID == nil && session.selectedShape?.linear != nil, "parts: selecting the main shape again")
+        session.deletePart(MaskRef(mask: id, part: part?.id))
+        check(session.mask(id: id)?.parts.count == 1, "parts: delete a part")
+
+        // Pick Object: the first click makes the mask and picking goes on; ⌥-click removes (subtract part).
+        session.beginPickingObject()
+        check(tool.pendingKind == .object && tool.addingTo == nil && session.selectedMaskID == nil, "pick: waits for a click")
+        drag(vp(0.5, 0.5), vp(0.5, 0.5), 0, false)
+        let objID = session.selectedMaskID
+        check(session.selectedMask?.ai?.target == .object && tool.pendingKind == .object && tool.addingTo == objID,
+              "pick: a click makes an object mask and keeps picking")
+        tool.optionHeld = true
+        check(tool.picksToSubtract, "pick: ⌥ turns the click into Remove")
+        drag(vp(0.3, 0.5), vp(0.3, 0.5), 0, true)
+        tool.optionHeld = false
+        drag(vp(0.7, 0.5), vp(0.7, 0.5), 0, false)
+        let obj = session.selectedMask
+        check(obj?.ai?.points.count == 1 && obj?.parts.count == 2 && obj?.parts.first?.mode == .subtract && obj?.parts.last?.mode == .add
+              && tool.pendingKind == .object, "pick: ⌥-click adds a subtract part, a click after it an add part")
+        tool.cancelPending()
+        check(tool.pendingKind == nil && tool.addingTo == nil, "pick: Esc ends picking")
+        session.finishMasking()
     }
 
     /// True if LocalAdjustmentRenderer returns its input unchanged for a +1 EV adjustment.

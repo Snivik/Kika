@@ -38,6 +38,7 @@ final class AppModel {
         didSet {
             guard selectedSource != oldValue else { return }
             showsInstaCalendar = false
+            showsCleanup = false
             // The plan board's pool is its folder: showing anything else leaves the board.
             if let planID = selectedPlanID, InstaStore.shared.plan(planID).map({ selectedSource != .folder(id: $0.folderID, includeSubfolders: includeSubfolders) }) ?? true {
                 selectedPlanID = nil
@@ -52,6 +53,8 @@ final class AppModel {
     }
     /// Library shows the Calendar (sidebar Library › Calendar; Instagram/UI).
     var showsInstaCalendar = false
+    /// Library shows Clean Up (sidebar Library › Clean Up; Cleanup/UI) over All Photographs.
+    var showsCleanup = false
     /// When a folder is selected, also show photos of its subfolders. On by default (Lightroom
     /// collection sets have no photos of their own); remembered across launches.
     var includeSubfolders = UserDefaults.standard.object(forKey: "library.includeSubfolders") as? Bool ?? true {
@@ -115,6 +118,7 @@ final class AppModel {
         TagStore.shared.load(catalog)
         InstaStore.shared.load(catalog)
         DeviceStore.shared.load(catalog)
+        CleanupStore.shared.load(catalog)
         PreviewService.shared.configure(catalog: catalog)
         observeCatalog()
         reloadFolders()
@@ -157,6 +161,8 @@ final class AppModel {
         selectedPlanID = nil
         InstaStore.shared.load(newCatalog)
         DeviceStore.shared.load(newCatalog)
+        showsCleanup = false
+        CleanupStore.shared.load(newCatalog)
         PreviewService.shared.configure(catalog: newCatalog)
         observeCatalog()
         selectedSource = .all

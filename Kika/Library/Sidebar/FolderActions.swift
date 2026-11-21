@@ -24,6 +24,8 @@ enum SidebarItem: Hashable {
     case plan(Int64)
     /// Library › Calendar (Instagram/UI).
     case instaCalendar
+    /// Library › Clean Up (Cleanup/UI).
+    case cleanup
 
     /// A row that is All Photographs + a filter; leaving it clears that filter.
     var isSmartSource: Bool {
@@ -38,6 +40,7 @@ extension AppModel {
     /// The sidebar row matching the current source + flag filter.
     var sidebarItem: SidebarItem {
         if showsInstaCalendar { return .instaCalendar }
+        if showsCleanup { return .cleanup }
         if let planID = selectedPlanID { return .plan(planID) }
         return switch selectedSource {
         case .all:
@@ -66,9 +69,15 @@ extension AppModel {
         let leavingSmartSource = sidebarItem.isSmartSource
         if case .plan = item {} else { selectedPlanID = nil }
         showsInstaCalendar = false
+        showsCleanup = false
         switch item {
         case .instaCalendar:
             showsInstaCalendar = true   // over whatever source is shown (it doesn't change)
+        case .cleanup:
+            // Over All Photographs without a filter, so Quick Look / Develop find every photo it lists.
+            resetFilter()
+            selectedSource = .all
+            showsCleanup = true
         case .plan(let id):
             guard let plan = InstaStore.shared.plan(id) else { return }
             if leavingSmartSource { resetFilter() }

@@ -145,6 +145,8 @@ nonisolated struct KeyCombo: Hashable, Sendable, CustomStringConvertible {
 /// The state the app is in when a key arrives (exactly one).
 nonisolated enum ShortcutContext: String, CaseIterable, Sendable {
     case library, develop, crop, mask, whiteBalance, fullScreen
+    /// The Quick Look window (Space in Library).
+    case quickLook
 }
 
 nonisolated enum ShortcutScope: String, CaseIterable, Sendable {
@@ -153,6 +155,8 @@ nonisolated enum ShortcutScope: String, CaseIterable, Sendable {
     /// The main window, Library and Develop (not the full-screen preview).
     case mainWindow
     case library
+    /// Library and the Quick Look window (Space; arrows move through the grid in both).
+    case browse
     /// Develop, including its tools.
     case develop
     /// Develop canvas and the full-screen preview (zoom, previous / next photo).
@@ -161,18 +165,22 @@ nonisolated enum ShortcutScope: String, CaseIterable, Sendable {
     case mask
     case whiteBalance
     case fullScreen
+    /// The full-screen preview and Quick Look (closing them).
+    case preview
 
     var contexts: Set<ShortcutContext> {
         switch self {
         case .global: return Set(ShortcutContext.allCases)
         case .mainWindow: return [.library, .develop, .crop, .mask, .whiteBalance]
         case .library: return [.library]
+        case .browse: return [.library, .quickLook]
         case .develop: return [.develop, .crop, .mask, .whiteBalance]
         case .viewer: return [.develop, .crop, .mask, .whiteBalance, .fullScreen]
         case .crop: return [.crop]
         case .mask: return [.mask]
         case .whiteBalance: return [.whiteBalance]
         case .fullScreen: return [.fullScreen]
+        case .preview: return [.fullScreen, .quickLook]
         }
     }
 
@@ -181,12 +189,14 @@ nonisolated enum ShortcutScope: String, CaseIterable, Sendable {
         case .global: return "Everywhere"
         case .mainWindow: return "Library & Develop"
         case .library: return "Library"
+        case .browse: return "Library & Quick Look"
         case .develop: return "Develop"
         case .viewer: return "Develop & Full Screen"
         case .crop: return "Crop Tool"
         case .mask: return "Mask Tool"
         case .whiteBalance: return "White Balance Selector"
         case .fullScreen: return "Full Screen Preview"
+        case .preview: return "Full Screen & Quick Look"
         }
     }
 
@@ -222,7 +232,7 @@ nonisolated enum ShortcutAction: String, CaseIterable, Sendable, Identifiable {
     case createVirtualCopy
     case bulkCrop, syncSettings, resetEdits, showInFinder   // photo actions (Actions/)
     // View
-    case libraryMode, developMode, fullScreenPreview, exitFullScreen, toggleSidePanels, toggleAllPanels
+    case libraryMode, developMode, fullScreenPreview, quickLook, toggleInfo, exitFullScreen, toggleSidePanels, toggleAllPanels
     case zoomToggle, zoomIn, zoomOut, temporaryHand, keyboardShortcuts
     case toggleSidebar, zoomFit
     // Library
@@ -266,7 +276,9 @@ nonisolated enum ShortcutAction: String, CaseIterable, Sendable, Identifiable {
         case .libraryMode: return "Library"
         case .developMode: return "Develop"
         case .fullScreenPreview: return "Full Screen Preview"
-        case .exitFullScreen: return "Close Full Screen Preview"
+        case .quickLook: return "Quick Look"
+        case .toggleInfo: return "Show / Hide Info"
+        case .exitFullScreen: return "Close Preview"
         case .toggleSidePanels: return "Show / Hide Side Panels"
         case .toggleAllPanels: return "Show / Hide All Panels"
         case .zoomToggle: return "Zoom Fit ↔ 1:1"
@@ -327,7 +339,7 @@ nonisolated enum ShortcutAction: String, CaseIterable, Sendable, Identifiable {
         case .pick, .unflag, .reject, .autoAdvance, .rating0, .rating1, .rating2, .rating3, .rating4, .rating5,
              .copySettings, .pasteSettings, .beforeAfter, .createVirtualCopy,
              .bulkCrop, .syncSettings, .resetEdits, .showInFinder: return .photo
-        case .libraryMode, .developMode, .fullScreenPreview, .exitFullScreen, .toggleSidePanels, .toggleAllPanels,
+        case .libraryMode, .developMode, .fullScreenPreview, .quickLook, .toggleInfo, .exitFullScreen, .toggleSidePanels, .toggleAllPanels,
              .zoomToggle, .zoomIn, .zoomOut, .temporaryHand, .keyboardShortcuts, .toggleSidebar, .zoomFit: return .view
         case .thumbnailLarger, .thumbnailSmaller, .moveLeft, .moveRight, .moveUp, .moveDown, .openInDevelop,
              .removePhotos, .deleteFolder: return .library
@@ -340,11 +352,11 @@ nonisolated enum ShortcutAction: String, CaseIterable, Sendable, Identifiable {
     var scope: ShortcutScope {
         switch self {
         case .selectAllPhotos, .deleteFolder: return .mainWindow
-        case .thumbnailLarger, .thumbnailSmaller, .moveLeft, .moveRight, .moveUp, .moveDown, .openInDevelop, .removePhotos:
-            return .library
+        case .thumbnailLarger, .thumbnailSmaller, .openInDevelop, .removePhotos, .toggleInfo: return .library
+        case .quickLook, .moveLeft, .moveRight, .moveUp, .moveDown: return .browse
         case .toggleSidePanels, .toggleAllPanels, .toggleCropTool, .rotateLeft, .rotateRight: return .develop
         case .zoomToggle, .zoomIn, .zoomOut, .zoomFit, .temporaryHand, .previousPhoto, .nextPhoto: return .viewer
-        case .exitFullScreen: return .fullScreen
+        case .exitFullScreen: return .preview
         case .cancelWhiteBalance: return .whiteBalance
         case .cropSwapAspect, .cropGridOverlay, .cropCommit, .cropCancel: return .crop
         case .maskOverlay, .brushSmaller, .brushLarger, .deleteMask, .maskCancel: return .mask
@@ -393,6 +405,8 @@ nonisolated enum ShortcutAction: String, CaseIterable, Sendable, Identifiable {
         case .libraryMode: return KeyCombo("g")
         case .developMode: return KeyCombo("d")
         case .fullScreenPreview: return KeyCombo("f")
+        case .quickLook: return KeyCombo("space")                        // Finder: Quick Look
+        case .toggleInfo: return KeyCombo("i", .command)                 // Finder: Get Info
         case .exitFullScreen: return KeyCombo("escape")
         case .toggleSidePanels: return KeyCombo("tab")
         case .toggleAllPanels: return KeyCombo("tab", .shift)

@@ -49,7 +49,8 @@ nonisolated struct EditSettings: Codable, Equatable, Sendable {
         colorMixer = c.decode(.colorMixer, default: ColorMixer())
         effects = c.decode(.effects, default: Effects())
         geometry = c.decode(.geometry, default: Geometry())
-        masks = c.decode(.masks, default: [])
+        // One mask this build can't read (e.g. a newer kind) is skipped, not the whole list.
+        masks = c.decode(.masks, default: [LossyMask]()).compactMap(\.mask)
         decode = c.decode(.decode, default: DecodeSettings())
     }
 
@@ -302,6 +303,8 @@ nonisolated struct Mask: Codable, Equatable, Identifiable, Sendable {
     /// Invert the mask (adjust everything outside the shape).
     var inverted: Bool = false
     var shape: MaskShape
+    /// More shapes added to / subtracted from `shape`, in order (brush refinements, Subtract Sky, …).
+    var parts: [MaskPart] = []
     var adjustments = LocalAdjustments()
 
     init(name: String = "Mask", shape: MaskShape, adjustments: LocalAdjustments = LocalAdjustments()) {
@@ -314,17 +317,51 @@ nonisolated struct Mask: Codable, Equatable, Identifiable, Sendable {
         isEnabled = c.decode(.isEnabled, default: true)
         inverted = c.decode(.inverted, default: false)
         shape = try c.decode(MaskShape.self, forKey: .shape)
+        parts = c.decode(.parts, default: [LossyPart]()).compactMap(\.part)
         adjustments = c.decode(.adjustments, default: LocalAdjustments())
     }
 }
 
-/// Encoded as `{"kind": "linear" | "radial" | "brush", "<kind>": {...}}`.
+/// One more shape of a mask. Add: the mask so far or this (max); subtract: the mask so far minus this. A brush
+/// part does both: its paint strokes add, its eraser strokes remove (from everything before it, and from its
+/// own earlier paint), whatever `mode` says.
+nonisolated struct MaskPart: Codable, Equatable, Identifiable, Sendable {
+    nonisolated enum Mode: String, Codable, Sendable { case add, subtract }
+
+    var id = UUID()
+    var mode: Mode = .add
+    var shape: MaskShape
+
+    init(mode: Mode, shape: MaskShape) { self.mode = mode; self.shape = shape }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = c.decode(.id, default: UUID())
+        mode = c.decode(.mode, default: .add)
+        shape = try c.decode(MaskShape.self, forKey: .shape)
+    }
+}
+
+/// A part that decodes to nil instead of failing the mask (unknown kind).
+private nonisolated struct LossyPart: Decodable {
+    let part: MaskPart?
+    init(from decoder: Decoder) throws { part = try? MaskPart(from: decoder) }
+}
+
+/// A mask that decodes to nil instead of failing the list (unknown kind, corrupt data).
+private nonisolated struct LossyMask: Decodable {
+    let mask: Mask?
+    init(from decoder: Decoder) throws { mask = try? Mask(from: decoder) }
+}
+
+/// Encoded as `{"kind": "linear" | "radial" | "brush" | "ai", "<kind>": {...}}`.
 nonisolated enum MaskShape: Codable, Equatable, Sendable {
     case linear(LinearGradientMask)
     case radial(RadialGradientMask)
     case brush(BrushMask)
+    /// Found by Apple's Vision on the photo (Develop/Masking/AIMasks.swift).
+    case ai(AIMask)
 
-    private enum CodingKeys: String, CodingKey { case kind, linear, radial, brush }
+    private enum CodingKeys: String, CodingKey { case kind, linear, radial, brush, ai }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -332,6 +369,7 @@ nonisolated enum MaskShape: Codable, Equatable, Sendable {
         case "linear": self = .linear(try c.decode(LinearGradientMask.self, forKey: .linear))
         case "radial": self = .radial(try c.decode(RadialGradientMask.self, forKey: .radial))
         case "brush": self = .brush(try c.decode(BrushMask.self, forKey: .brush))
+        case "ai": self = .ai(try c.decode(AIMask.self, forKey: .ai))
         case let other:
             throw DecodingError.dataCorruptedError(forKey: .kind, in: c, debugDescription: "Unknown mask kind \(other)")
         }
@@ -343,7 +381,42 @@ nonisolated enum MaskShape: Codable, Equatable, Sendable {
         case .linear(let m): try c.encode("linear", forKey: .kind); try c.encode(m, forKey: .linear)
         case .radial(let m): try c.encode("radial", forKey: .kind); try c.encode(m, forKey: .radial)
         case .brush(let m): try c.encode("brush", forKey: .kind); try c.encode(m, forKey: .brush)
+        case .ai(let m): try c.encode("ai", forKey: .kind); try c.encode(m, forKey: .ai)
         }
+    }
+}
+
+/// What Vision looks for. The mask itself is never stored: it is computed from the photo (decoded with default
+/// settings, so edits don't move it) and cached in memory, so the same settings always give the same mask.
+nonisolated struct AIMask: Codable, Equatable, Sendable {
+    nonisolated enum Target: String, Codable, Equatable, Sendable {
+        /// Every foreground subject (people, animals, objects).
+        case subject
+        /// Everything but the subjects.
+        case background
+        /// People only.
+        case people
+        /// Sky connected to the top of the photo (a colour / texture heuristic: Vision has no sky detector).
+        case sky
+        /// The foreground subjects under `points`.
+        case object
+    }
+
+    var target: Target = .subject
+    /// Picked points (`object`), mask space.
+    var points: [NormPoint] = []
+    /// -100…100: shrinks (−) or grows (+) the found mask, up to `AIMaskEngine.maxExpand` of the image width.
+    var expand: Double = 0
+    /// 0…100: softens the found mask's edge, up to `AIMaskEngine.maxFeather` of the image width.
+    var feather: Double = 0
+
+    init(target: Target, points: [NormPoint] = []) { self.target = target; self.points = points }
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        target = c.decode(.target, default: .subject)
+        points = c.decode(.points, default: [])
+        expand = c.decode(.expand, default: 0)
+        feather = c.decode(.feather, default: 0)
     }
 }
 

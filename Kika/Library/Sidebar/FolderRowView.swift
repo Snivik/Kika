@@ -3,7 +3,7 @@
 //  Kika
 //
 //  The nested folder outline: DisclosureGroups with persisted expansion (OutlineGroup can't
-//  bind expansion), rows with inline rename, counts, drag source and drop target.
+//  bind expansion), rows with inline rename, counts, drag source (FolderRowDragging.swift) and drop target.
 //
 
 import AppKit
@@ -79,7 +79,7 @@ struct FolderRowView: View {
         .contentShape(Rectangle())
         .help(tooltip)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { rowHeight = $0 }
-        .modifier(FolderDragSource(folderID: node.id, isEnabled: !isRenaming))
+        .background(FolderRowMarker(folderID: node.id, isEnabled: !isRenaming))   // drag source: FolderRowDragging.swift
         .onDrop(of: [.plainText], delegate: FolderRowDropDelegate(folderID: node.id, rowHeight: rowHeight, model: model, zone: $dropZone))
         .background {
             if dropZone == .into {
@@ -128,18 +128,6 @@ struct FolderRowView: View {
         let drop = "\nDrop photos to add them (same photo) · ⌘ move · ⌥ virtual copies"
         if node.children.isEmpty { return "\(node.folder.name): \(photos(directCount))" + drop }
         return "\(node.folder.name): \(photos(directCount)) directly, \(photos(totalCount)) including subfolders" + drop
-    }
-}
-
-/// Makes a row draggable, except while its name is being edited (mouse-drag selects text then).
-/// Uses `itemProvider` (the List-row drag API): `onDrag` on a List row swallows the mouse-down,
-/// so clicking the row's name wouldn't select the folder.
-private struct FolderDragSource: ViewModifier {
-    let folderID: Int64
-    let isEnabled: Bool
-
-    func body(content: Content) -> some View {
-        content.itemProvider(isEnabled ? { KikaDrag.provider(.folder(folderID)) } : nil)
     }
 }
 
